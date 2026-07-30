@@ -1,0 +1,89 @@
+# =============================================================================
+# docker-compose.prod.yml — Production deployment for Strike Manager
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Prerequisites:
+#   - Create a .env file with required environment variables
+#   - See README.md for details
+# =============================================================================
+
+services:
+  # -------------------------------------------------------------------------
+  # PostgreSQL 16 database
+  # -------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bowling}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bowling}
+      POSTGRES_DB: ${POSTGRES_DB:-bowling}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bowling}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # -------------------------------------------------------------------------
+  # Fastify + tRPC API server
+  # -------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "${API_PORT:-3001}:3001"
+    environment:
+      # The server reads process.env.PORT (see apps/api/src/server.ts)
+      PORT: 3001
+      DATABASE_URL: postgres://${POSTGRES_USER:-bowling}:${POSTGRES_PASSWORD:-bowling}@postgres:5432/${POSTGRES_DB:-bowling}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # -------------------------------------------------------------------------
+  # Next.js 15 web app
+  # -------------------------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        # ⚠️ Replace these with your actual domain or VPS IP.
+        # NEXT_PUBLIC_API_URL is used by the tRPC client in the browser.
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:3001/trpc}
+        - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    environment:
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/trpc}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  pgdata:

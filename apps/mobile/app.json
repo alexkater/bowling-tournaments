@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "Strike Manager",
+    "slug": "strike-manager",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "strikemanager",
+    "platforms": ["ios", "android"],
+    "ios": {
+      "bundleIdentifier": "com.strikemanager.app",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.strikemanager.app",
+      "versionCode": 1
+    },
+    "plugins": ["expo-router", "expo-secure-store"]
+  }
+}

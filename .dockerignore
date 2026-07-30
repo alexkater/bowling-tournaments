@@ -1,0 +1,17 @@
+node_modules/
+.git/
+.github/
+.omo/
+.opencode/
+.env
+.env.local
+.env.*.local
+*.tsbuildinfo
+.next/
+.turbo/
+dist/
+coverage/
+.DS_Store
+*.log
+apps/mobile/
+docs/

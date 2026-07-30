@@ -1,0 +1,66 @@
+# =============================================================================
+# Dockerfile.web — Multi-stage build for the Next.js web app
+# =============================================================================
+
+FROM node:20-alpine AS base
+RUN apk add --no-cache libc6-compat
+RUN corepack enable && corepack prepare pnpm@9.1.0 --activate
+WORKDIR /app
+
+# ---------------------------------------------------------------------------
+# Stage 1: Builder — install deps, compile, and build Next.js standalone
+# ---------------------------------------------------------------------------
+FROM base AS builder
+
+# Build args for public env vars (must be provided at build time)
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+
+# Copy workspace config and package manifests
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json tsconfig.json ./
+COPY apps/web/package.json apps/web/
+COPY apps/api/package.json apps/api/
+COPY packages/shared/package.json packages/shared/
+COPY packages/db/package.json packages/db/
+
+# Install ALL dependencies
+RUN pnpm install --no-frozen-lockfile
+
+# Copy source code
+COPY apps/web apps/web
+COPY apps/api apps/api
+COPY packages/shared packages/shared
+COPY packages/db packages/db
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN pnpm --filter @bowling/web build
+
+# ---------------------------------------------------------------------------
+# Stage 2: Runner — minimal production image with standalone server
+# ---------------------------------------------------------------------------
+FROM base AS runner
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# Copy standalone output (includes compiled server and production node_modules)
+COPY --from=builder /app/apps/web/.next/standalone ./
+
+# Copy static files (not bundled in standalone output)
+COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+
+RUN chown -R nextjs:nodejs /app
+
+USER nextjs
+
+EXPOSE 3000
+
+CMD ["node", "apps/web/server.js"]

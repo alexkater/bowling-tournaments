@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1784081050037,
+      "tag": "0000_add_center_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784226300091,
+      "tag": "0001_backfill_organizer_organizations",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784231639260,
+      "tag": "0002_add_tenant_integrity_constraints",
+      "breakpoints": true
+    }
+  ]
+}

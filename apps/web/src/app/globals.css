@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink-900: #0a0a14;
+  --color-ink-800: #12122a;
+  --color-ink-700: #1a1a3e;
+  --color-ink-600: #24245a;
+  --color-ink-500: #30306e;
+  --color-ink-400: #48488a;
+  --color-ink-300: #6e6ea8;
+  --color-ink-200: #9e9ec8;
+  --color-ink-100: #cfcfe6;
+  --color-ink-50: #efeff8;
+
+  --color-pin-600: #8b1a2b;
+  --color-pin-500: #b91c39;
+  --color-pin-400: #e63946;
+  --color-pin-300: #f0707a;
+  --color-pin-200: #f8a4ab;
+  --color-pin-100: #fdd4d8;
+
+  --color-felt-900: #0f1a14;
+  --color-felt-800: #1a2e24;
+  --color-felt-700: #244034;
+  --color-felt-600: #2e5244;
+  --color-felt-500: #386454;
+  --color-felt-400: #52826e;
+  --color-felt-300: #7aa08e;
+  --color-felt-200: #aac4b8;
+  --color-felt-100: #d8e6de;
+
+  --color-cream-50: #fefdfb;
+  --color-cream-100: #fdf9f0;
+  --color-cream-200: #faf0e0;
+  --color-cream-300: #f5e3c8;
+  --color-cream-400: #edd0a8;
+  --color-cream-500: #e2b880;
+  --color-cream-600: #d19e5a;
+  --color-cream-700: #b8823a;
+  --color-cream-800: #9a6829;
+  --color-cream-900: #7a4e1d;
+
+  --color-steel-900: #0f172a;
+  --color-steel-800: #1e293b;
+  --color-steel-700: #334155;
+  --color-steel-600: #475569;
+  --color-steel-500: #64748b;
+  --color-steel-400: #94a3b8;
+  --color-steel-300: #cbd5e1;
+  --color-steel-200: #e2e8f0;
+  --color-steel-100: #f1f5f9;
+  --color-steel-50: #f8fafc;
+}
