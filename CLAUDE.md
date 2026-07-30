@@ -1,6 +1,7 @@
 # Strike Manager — Bowling Tournament Management
 
 ## Stack
+
 - **Monorepo**: pnpm + Turborepo
 - **Shared**: `@bowling/shared` — tipos, Zod schemas, lógica de negocio
 - **API**: Fastify + tRPC + Drizzle ORM + PostgreSQL
@@ -11,6 +12,7 @@
 - **Testing**: Vitest (unit/integration) + Playwright (E2E)
 
 ## Project Structure
+
 ```
 bowling-tournaments/
 ├── apps/
@@ -26,6 +28,7 @@ bowling-tournaments/
 ```
 
 ## Commands
+
 - `pnpm dev` — Start all dev servers
 - `pnpm build` — Build all packages
 - `pnpm test` — Run all tests
@@ -34,6 +37,7 @@ bowling-tournaments/
 - `pnpm format` — Prettier format
 
 ## Development Rules
+
 - Toda la lógica de negocio va en `@bowling/shared`. La API, web y mobile son solo canales de entrega.
 - **El domain core es el foso competitivo**. Handicap, brackets, payouts, tiebreakers, state machines — funciones puras, sin dependencias externas, 100% testable.
 - Los módulos de utils son independientes entre sí (handicap.ts no importa brackets.ts).
@@ -45,6 +49,7 @@ bowling-tournaments/
 - Commits atómicos con conventional commits.
 
 ## Domain Naming
+
 - Tournament: torneo con configuración, fechas, formato
 - Squad: sesión de juego dentro de un torneo
 - BracketPool: pool de brackets (sidepot)
@@ -52,6 +57,7 @@ bowling-tournaments/
 - TournamentPlayer: inscripción de un jugador a un torneo
 
 ## UI Design Rules
+
 - **Ultra-profesional, premium SaaS.** Nada de UI genérica "AI-generated".
 - Sin emojis en la UI. Iconos solo via lucide-react.
 - Paleta de colores custom, bowling-inspired (caoba, azul pizarra, blanco), nunca paletas default de Tailwind.
@@ -60,7 +66,13 @@ bowling-tournaments/
 - Los colores custom se definen con `@theme { --color-*: ... }` en globals.css.
 
 ## Production Deploy
+
 - Hetzner VPS: IP 178.104.71.198, SSH key ~/.ssh/nest_deploy
-- Deploy script: `./deploy.sh` (rsync + docker compose build + up)
-- DB schema push post-deploy: `docker compose exec api sh -c "cd packages/db && npx drizzle-kit push"`
-- La API en producción usa `tsx` (no Node directo) porque ESM + TypeScript
+- Production URL: `https://bowling.mogambo.xyz`
+- Bowling-only bindings: API `127.0.0.1:3001`, web `127.0.0.1:3103`
+- Deploy only merged `main` with `./deploy.sh`; it syncs source and invokes the locked server deploy
+- The existing database needs `./deploy.sh --baseline-migrations` exactly once; routine deploys use committed Drizzle migrations and never `push`
+- `/opt/bowling-tournaments/.env` is persistent and server-only; normal deploys never rotate or copy secrets
+- The server deploy validates Compose, backs up PostgreSQL, applies migrations, runs health checks, configures the isolated Nginx site, and retains image rollback tags
+- Never modify another project's containers, ports, Nginx sites, directories, databases, or environment files
+- La API en producción usa `node --import tsx` con la dependencia bloqueada, sin `npx` ni descargas runtime

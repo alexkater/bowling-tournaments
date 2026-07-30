@@ -8,6 +8,7 @@
     "build": "turbo build",
     "test": "turbo test",
     "test:run": "vitest run",
+    "test:infra": "node --test scripts/*.test.mjs",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "clean": "turbo clean",

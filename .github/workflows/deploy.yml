@@ -1,87 +1,33 @@
-name: Deploy
+name: Production Gate
 
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: bowling-production-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  # ── Run all CI checks first ─────────────────────────────────────────
   check:
     name: All Checks
     uses: ./.github/workflows/ci.yml
 
-  # ── Deploy web to Vercel ────────────────────────────────────────────
-  deploy-web:
-    name: Deploy Web (Vercel)
+  production-images:
+    name: Build Production Images
     needs: [check]
     runs-on: ubuntu-latest
+    env:
+      POSTGRES_PASSWORD: ci-only-not-a-production-secret
+      JWT_SECRET: ci-only-not-a-production-secret
+      NEXT_PUBLIC_API_URL: https://bowling.mogambo.xyz/trpc
+      NEXT_PUBLIC_APP_URL: https://bowling.mogambo.xyz
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Build web
-        run: pnpm --filter=@bowling/web build
-      # ──────────────────────────────────────────────────────────────────
-      # TODO: Replace with actual Vercel deploy step
-      #
-      # Setup:
-      #   1. Install Vercel CLI or use amondnet/vercel-action
-      #   2. Add secrets to GitHub repo:
-      #      - VERCEL_TOKEN
-      #      - VERCEL_ORG_ID
-      #      - VERCEL_PROJECT_ID
-      #
-      # Example using Vercel CLI:
-      #   - name: Deploy to Vercel
-      #     run: npx vercel --prod --token=${{ secrets.VERCEL_TOKEN }}
-      #
-      # Example using vercel-action:
-      #   - name: Deploy to Vercel
-      #     uses: amondnet/vercel-action@v25
-      #     with:
-      #       vercel-token: ${{ secrets.VERCEL_TOKEN }}
-      #       vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-      #       vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-      #       vercel-args: --prod
-      # ──────────────────────────────────────────────────────────────────
-      - name: Placeholder — deploy web
-        run: echo "Deploy web to Vercel (configure secrets and uncomment above)"
-
-  # ── Deploy API to Railway / Fly.io ──────────────────────────────────
-  deploy-api:
-    name: Deploy API (Railway)
-    needs: [check]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Build api
-        run: pnpm --filter=@bowling/api build
-      # ──────────────────────────────────────────────────────────────────
-      # TODO: Replace with actual Railway or Fly.io deploy step
-      #
-      # Option A — Railway (via CLI):
-      #   - name: Deploy to Railway
-      #     run: npx railway up --service api
-      #     env:
-      #       RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-      #
-      # Option B — Fly.io (via flyctl):
-      #   - name: Deploy to Fly.io
-      #     uses: superfly/flyctl-actions@1.5
-      #     with:
-      #       args: deploy --config apps/api/fly.toml
-      #     env:
-      #       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-      # ──────────────────────────────────────────────────────────────────
-      - name: Placeholder — deploy api
-        run: echo "Deploy API to Railway/Fly (configure secrets and uncomment above)"
+      - name: Validate production Compose
+        run: docker compose -f docker-compose.prod.yml config --quiet
+      - name: Build production API and web images
+        run: docker compose -f docker-compose.prod.yml build api web

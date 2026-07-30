@@ -1,133 +1,104 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
-# =============================================================================
-# deploy.sh — Deploy Strike Manager to Hetzner VPS
-# =============================================================================
-
-VPS_HOST="178.104.71.198"
-VPS_USER="root"
-SSH_KEY="$HOME/.ssh/nest_deploy"
-DEPLOY_DIR="/opt/bowling-tournaments"
+readonly VPS_HOST="178.104.71.198"
+readonly VPS_USER="root"
+readonly SSH_KEY="$HOME/.ssh/nest_deploy"
+readonly DEPLOY_DIR="/opt/bowling-tournaments"
+readonly DOMAIN="bowling.mogambo.xyz"
+readonly API_PORT="3001"
+readonly WEB_PORT="3103"
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SSH_OPTIONS=(-i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=10)
+BASELINE_ARGUMENT=""
 
-echo "=== Strike Manager Deploy ==="
-echo "Host: $VPS_HOST"
-echo ""
-
-# ── 1. Verify SSH connectivity ──────────────────────────────────────
-echo "[1/5] Verifying SSH connectivity..."
-ssh -i "$SSH_KEY" -o ConnectTimeout=5 "$VPS_USER@$VPS_HOST" "echo OK" > /dev/null || {
-  echo "ERROR: Cannot connect to $VPS_HOST"
+case "${1:-}" in
+  "") ;;
+  --baseline-migrations) BASELINE_ARGUMENT="--baseline-migrations" ;;
+  *)
+    printf '[bowling-sync] ERROR: unsupported argument: %s\n' "$1"
+    exit 1
+    ;;
+esac
+[[ "$#" -le 1 ]] || {
+  printf '[bowling-sync] ERROR: too many arguments\n'
   exit 1
 }
 
-# ── 2. Generate production .env ─────────────────────────────────────
-echo "[2/5] Generating production .env..."
-JWT_SECRET=$(openssl rand -hex 32)
-DB_PASSWORD=$(openssl rand -hex 16)
+log() {
+  printf '[bowling-sync] %s\n' "$*"
+}
 
-cat > "$PROJECT_DIR/.env.production" << EOF
-# Strike Manager — Production Environment
-# Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+[[ "$DOMAIN" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$ ]] || {
+  log "ERROR: invalid DOMAIN"
+  exit 1
+}
+[[ "$API_PORT" =~ ^[0-9]+$ && "$WEB_PORT" =~ ^[0-9]+$ ]] || {
+  log "ERROR: ports must be numeric"
+  exit 1
+}
+[[ -f "$SSH_KEY" ]] || {
+  log "ERROR: SSH key not found: $SSH_KEY"
+  exit 1
+}
 
-POSTGRES_USER=bowling
-POSTGRES_PASSWORD=$DB_PASSWORD
-POSTGRES_DB=bowling
-JWT_SECRET=$JWT_SECRET
-API_PORT=3001
-WEB_PORT=3000
-NEXT_PUBLIC_API_URL=http://$VPS_HOST:3001/trpc
-NEXT_PUBLIC_APP_URL=http://$VPS_HOST:3000
-EOF
+CURRENT_BRANCH="$(git -C "$PROJECT_DIR" branch --show-current)"
+[[ "$CURRENT_BRANCH" == main ]] || {
+  log "ERROR: production deploys require the local main branch (current: $CURRENT_BRANCH)"
+  exit 1
+}
+[[ -z "$(git -C "$PROJECT_DIR" status --porcelain)" ]] || {
+  log "ERROR: production deploys require a clean working tree"
+  exit 1
+}
 
-echo "   .env.production created with fresh secrets"
-echo "   NEXT_PUBLIC_API_URL=http://$VPS_HOST:3001/trpc"
-echo "   NEXT_PUBLIC_APP_URL=http://$VPS_HOST:3000"
+log "Verifying local main matches origin/main"
+ORIGIN_URL="$(git -C "$PROJECT_DIR" remote get-url origin)"
+case "$ORIGIN_URL" in
+  https://github.com/alexkater/bowling-tournaments.git | \
+    git@github.com:alexkater/bowling-tournaments.git | \
+    git@github-mogamboai:alexkater/bowling-tournaments.git) ;;
+  *)
+    log "ERROR: origin is not the canonical bowling-tournaments repository"
+    exit 1
+    ;;
+esac
+git -C "$PROJECT_DIR" fetch --quiet origin main
+LOCAL_SHA="$(git -C "$PROJECT_DIR" rev-parse HEAD)"
+REMOTE_SHA="$(git -C "$PROJECT_DIR" rev-parse origin/main)"
+[[ "$LOCAL_SHA" == "$REMOTE_SHA" ]] || {
+  log "ERROR: local HEAD does not match origin/main"
+  exit 1
+}
 
-# ── 3. Sync files to server ─────────────────────────────────────────
-echo "[3/5] Syncing project files to server..."
-rsync -avz --delete \
-  --exclude='node_modules' \
-  --exclude='.git' \
-  --exclude='.github' \
-  --exclude='.omo' \
-  --exclude='.opencode' \
-  --exclude='.env' \
-  --exclude='.env.local' \
-  --exclude='.env.*.local' \
-  --exclude='*.tsbuildinfo' \
-  --exclude='.next' \
-  --exclude='.turbo' \
-  --exclude='dist' \
-  --exclude='coverage' \
+log "Verifying isolated deployment target"
+ssh "${SSH_OPTIONS[@]}" "$VPS_USER@$VPS_HOST" \
+  "test -d '$DEPLOY_DIR' && test -w '$DEPLOY_DIR'"
+
+log "Synchronizing reviewed source; production secrets remain server-side"
+rsync -az --delete \
+  --exclude='.git/' \
+  --exclude='.env*' \
+  --exclude='node_modules/' \
+  --exclude='.next/' \
+  --exclude='.turbo/' \
+  --exclude='dist/' \
+  --exclude='coverage/' \
+  --exclude='playwright-report/' \
+  --exclude='test-results/' \
   --exclude='.DS_Store' \
   --exclude='*.log' \
-  --exclude='apps/mobile' \
-  --exclude='docs' \
-  --exclude='pnpm-lock.yaml' \
-  -e "ssh -i $SSH_KEY" \
+  -e "ssh -i '$SSH_KEY' -o BatchMode=yes -o ConnectTimeout=10" \
   "$PROJECT_DIR/" \
   "$VPS_USER@$VPS_HOST:$DEPLOY_DIR/"
 
-# Copy pnpm-lock.yaml separately (frozen lockfile)
-scp -i "$SSH_KEY" "$PROJECT_DIR/pnpm-lock.yaml" "$VPS_USER@$VPS_HOST:$DEPLOY_DIR/"
+log "Running locked production deployment"
+if [[ -n "$BASELINE_ARGUMENT" ]]; then
+  ssh "${SSH_OPTIONS[@]}" "$VPS_USER@$VPS_HOST" \
+    "bash '$DEPLOY_DIR/scripts/deploy-server.sh' --baseline-migrations"
+else
+  ssh "${SSH_OPTIONS[@]}" "$VPS_USER@$VPS_HOST" \
+    "bash '$DEPLOY_DIR/scripts/deploy-server.sh'"
+fi
 
-# ── 4. Copy .env.production to server ───────────────────────────────
-echo "[4/5] Copying production .env to server..."
-scp -i "$SSH_KEY" "$PROJECT_DIR/.env.production" "$VPS_USER@$VPS_HOST:$DEPLOY_DIR/.env"
-
-# ── 5. Build and start containers ───────────────────────────────────
-echo "[5/5] Building and starting containers..."
-ssh -i "$SSH_KEY" "$VPS_USER@$VPS_HOST" << 'ENDSSH'
-set -euo pipefail
-cd /opt/bowling-tournaments
-
-echo "   Pulling base images..."
-docker pull node:20-alpine &
-docker pull postgres:16-alpine &
-wait
-
-echo "   Building containers..."
-docker compose -f docker-compose.prod.yml build --no-cache 2>&1 | tail -3
-
-echo "   Starting services..."
-docker compose -f docker-compose.prod.yml up -d postgres
-
-echo "   Waiting for PostgreSQL to be healthy..."
-sleep 5
-for i in $(seq 1 20); do
-  if docker compose -f docker-compose.prod.yml exec -T postgres pg_isready -U bowling > /dev/null 2>&1; then
-    echo "   PostgreSQL is ready!"
-    break
-  fi
-  sleep 2
-done
-
-echo "   Running database schema push..."
-docker compose -f docker-compose.prod.yml run --rm api npx drizzle-kit push --config=packages/db/drizzle.config.ts 2>&1 | tail -3
-
-echo "   Starting all services..."
-docker compose -f docker-compose.prod.yml up -d
-
-echo ""
-echo "   Waiting for API to be healthy..."
-for i in $(seq 1 30); do
-  if curl -s http://localhost:3001/health > /dev/null 2>&1; then
-    echo "   API is healthy!"
-    break
-  fi
-  sleep 2
-done
-
-echo ""
-echo "   Container status:"
-docker compose -f docker-compose.prod.yml ps
-ENDSSH
-
-echo ""
-echo "=== Deploy complete ==="
-echo "API:  http://$VPS_HOST:3001/health"
-echo "Web:  http://$VPS_HOST:3000"
-echo ""
-echo "Logs: ssh -i $SSH_KEY $VPS_USER@$VPS_HOST 'docker compose -f $DEPLOY_DIR/docker-compose.prod.yml logs -f'"
+log "Deployment finished; route configured for $DOMAIN"

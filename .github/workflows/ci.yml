@@ -70,6 +70,34 @@ jobs:
       - name: Integration tests (api)
         run: pnpm --filter=@bowling/api test
 
+  infrastructure:
+    name: Infrastructure Safety
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Test production environment safety
+        run: pnpm test:infra
+      - name: Shell syntax
+        run: bash -n deploy.sh scripts/deploy-server.sh
+      - name: Production Compose validation
+        env:
+          POSTGRES_PASSWORD: ci-only-not-a-production-secret
+          JWT_SECRET: ci-only-not-a-production-secret
+          NEXT_PUBLIC_API_URL: https://bowling.mogambo.xyz/trpc
+          NEXT_PUBLIC_APP_URL: https://bowling.mogambo.xyz
+        run: |
+          docker compose -f docker-compose.prod.yml config --quiet
+          images="$(docker compose -f docker-compose.prod.yml config --images)"
+          [[ "$images" == *"bowling-tournaments-api:latest"* ]]
+          [[ "$images" == *"bowling-tournaments-web:latest"* ]]
+
   build:
     name: Build Check
     runs-on: ubuntu-latest

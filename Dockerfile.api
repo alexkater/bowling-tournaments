@@ -1,49 +1,26 @@
 # =============================================================================
-# Dockerfile.api — Multi-stage build for the Fastify + tRPC API backend
+# Dockerfile.api — reproducible multi-stage build for the Fastify + tRPC API
 # =============================================================================
 
-# ---------------------------------------------------------------------------
-# Stage 1: Base — shared setup (pnpm, working directory)
-# ---------------------------------------------------------------------------
 FROM node:20-alpine AS base
 RUN apk add --no-cache libc6-compat
 RUN corepack enable && corepack prepare pnpm@9.1.0 --activate
 WORKDIR /app
 
-# ---------------------------------------------------------------------------
-# Stage 2: Build — install all deps, compile packages + API
-# ---------------------------------------------------------------------------
 FROM base AS builder
 
-# Copy workspace configuration files
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json tsconfig.json ./
+COPY pnpm-lock.yaml package.json turbo.json tsconfig.json ./
+COPY infra/docker/pnpm-workspace.api.yaml ./pnpm-workspace.yaml
+COPY apps/api/package.json apps/api/package.json
+COPY packages/shared/package.json packages/shared/package.json
+COPY packages/db/package.json packages/db/package.json
+RUN pnpm install --frozen-lockfile --filter @bowling/api...
+COPY . .
+COPY infra/docker/pnpm-workspace.api.yaml ./pnpm-workspace.yaml
+RUN pnpm --filter @bowling/shared exec tsc --project tsconfig.json
+RUN pnpm --filter @bowling/db exec tsc --project tsconfig.json
 
-# Copy package.json manifests for the API and its workspace dependencies
-COPY apps/api/package.json apps/api/
-COPY packages/shared/package.json packages/shared/
-COPY packages/db/package.json packages/db/
-
-# Install ALL dependencies (including devDependencies needed for compilation)
-RUN pnpm install --no-frozen-lockfile
-
-# Install @types/node at workspace root (required by packages/db which uses process/console)
-# The lockfile is in a Docker layer so this doesn't modify source files.
-RUN pnpm add -D -w @types/node
-
-# Copy source code for workspace packages and API
-COPY packages/shared packages/shared
-COPY packages/db packages/db
-COPY apps/api apps/api
-
-# Compile workspace packages (no build scripts exist, run tsc directly).
-# Use --project from root so @types/node resolves correctly.
-# db/seed.ts has pre-existing TS errors (process/console types), but tsc still
-# emits JS output with noEmitOnError=false (the default). The || true pattern
-# allows the build to continue — seed.ts is a dev utility, not needed in prod.
-RUN npx tsc --skipLibCheck --project packages/shared/tsconfig.json
-RUN npx tsc --skipLibCheck --project packages/db/tsconfig.json || echo "tsc emitted output with type errors (non-fatal)"
-
-# Patch package.json exports to point at compiled JS for production resolution
+# Production resolution must use compiled workspace output rather than TS source.
 RUN node -e "const fs=require('fs'); \
   ['packages/shared','packages/db'].forEach(p => { \
     const pj=JSON.parse(fs.readFileSync(p+'/package.json','utf8')); \
@@ -52,44 +29,40 @@ RUN node -e "const fs=require('fs'); \
     fs.writeFileSync(p+'/package.json',JSON.stringify(pj,null,2)); \
   });"
 
-# Compile the API
 RUN pnpm --filter @bowling/api build
 
-# ---------------------------------------------------------------------------
-# Stage 3: Runner — minimal production image
-# ---------------------------------------------------------------------------
 FROM base AS runner
 
 ENV NODE_ENV=production
 
-# Copy package manifests for a clean production install
 COPY --from=builder /app/package.json \
-                   /app/pnpm-lock.yaml \
-                   /app/pnpm-workspace.yaml \
-                   ./
-
+  /app/pnpm-lock.yaml \
+  /app/pnpm-workspace.yaml \
+  ./
 COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
 COPY --from=builder /app/packages/shared/package.json ./packages/shared/package.json
 COPY --from=builder /app/packages/db/package.json ./packages/db/package.json
 
-# Install production dependencies only
-RUN pnpm install --no-frozen-lockfile --prod
+RUN pnpm install --frozen-lockfile --prod --filter @bowling/api...
 
-# Copy compiled workspace packages (with patched exports)
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/packages/db/dist ./packages/db/dist
-
-# Copy compiled API server
-COPY --from=builder /app/apps/api/dist ./apps/api/dist
-
-# Copy db schema source files (needed by drizzle-kit push in production)
 COPY --from=builder /app/packages/db/src ./packages/db/src
+COPY --from=builder /app/packages/db/migrations ./packages/db/migrations
+COPY --from=builder /app/packages/db/scripts ./packages/db/scripts
 COPY --from=builder /app/packages/db/drizzle.config.ts ./packages/db/drizzle.config.ts
-COPY --from=builder /app/packages/shared/src ./packages/shared/src
-
-# Copy API source files (needed by tsx to run the server)
+COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/src ./apps/api/src
 
-EXPOSE 3001
+RUN addgroup --system --gid 1001 nodejs && \
+  adduser --system --uid 1001 api && \
+  chown -R api:nodejs /app
 
-CMD ["npx", "tsx", "apps/api/src/server.ts"]
+USER api
+WORKDIR /app/apps/api
+
+EXPOSE 3001
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD node -e "require('node:http').get('http://127.0.0.1:3001/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+
+CMD ["node", "--import", "tsx", "src/server.ts"]

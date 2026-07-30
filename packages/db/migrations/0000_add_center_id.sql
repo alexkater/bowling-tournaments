@@ -179,6 +179,17 @@ CREATE TABLE "tournaments" (
 	"updatedAt" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "user_credentials" (
+	"id" text PRIMARY KEY NOT NULL,
+	"profileId" text NOT NULL,
+	"email" text NOT NULL,
+	"passwordHash" text NOT NULL,
+	"createdAt" timestamp with time zone DEFAULT now() NOT NULL,
+	"updatedAt" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "user_credentials_profileId_unique" UNIQUE("profileId"),
+	CONSTRAINT "user_credentials_email_unique" UNIQUE("email")
+);
+--> statement-breakpoint
 ALTER TABLE "bracket_entries" ADD CONSTRAINT "bracket_entries_bracketPoolId_bracket_pools_id_fk" FOREIGN KEY ("bracketPoolId") REFERENCES "public"."bracket_pools"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bracket_entries" ADD CONSTRAINT "bracket_entries_tournamentPlayerId_tournament_players_id_fk" FOREIGN KEY ("tournamentPlayerId") REFERENCES "public"."tournament_players"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bracket_matches" ADD CONSTRAINT "bracket_matches_roundId_bracket_rounds_id_fk" FOREIGN KEY ("roundId") REFERENCES "public"."bracket_rounds"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -200,4 +211,5 @@ ALTER TABLE "stages" ADD CONSTRAINT "stages_tournamentId_tournaments_id_fk" FORE
 ALTER TABLE "tournament_players" ADD CONSTRAINT "tournament_players_tournamentId_tournaments_id_fk" FOREIGN KEY ("tournamentId") REFERENCES "public"."tournaments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tournament_players" ADD CONSTRAINT "tournament_players_profileId_profiles_id_fk" FOREIGN KEY ("profileId") REFERENCES "public"."profiles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tournament_players" ADD CONSTRAINT "tournament_players_squadId_squads_id_fk" FOREIGN KEY ("squadId") REFERENCES "public"."squads"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "tournaments" ADD CONSTRAINT "tournaments_organizationId_organizations_id_fk" FOREIGN KEY ("organizationId") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "tournaments" ADD CONSTRAINT "tournaments_organizationId_organizations_id_fk" FOREIGN KEY ("organizationId") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "user_credentials" ADD CONSTRAINT "user_credentials_profileId_profiles_id_fk" FOREIGN KEY ("profileId") REFERENCES "public"."profiles"("id") ON DELETE cascade ON UPDATE no action;
