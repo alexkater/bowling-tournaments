@@ -75,6 +75,37 @@ wait_for_url() {
   fail "$name did not become healthy at $url"
 }
 
+wait_for_service_health() {
+  local service="$1"
+  local attempts="${2:-30}"
+  local container_id status=unknown
+
+  container_id="$("${COMPOSE[@]}" ps -q "$service")"
+  if [[ -z "$container_id" ]]; then
+    fail "$service container was not created"
+    return 1
+  fi
+
+  for ((attempt = 1; attempt <= attempts; attempt += 1)); do
+    status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container_id")"
+    if [[ "$status" == healthy ]]; then
+      log "$service Docker health is healthy"
+      return 0
+    fi
+    if [[ "$status" == unhealthy ]]; then
+      fail "$service Docker health is unhealthy"
+      return 1
+    fi
+    if [[ "$status" == none ]]; then
+      fail "$service does not define a Docker health check"
+      return 1
+    fi
+    sleep 2
+  done
+
+  fail "$service Docker health did not become healthy (last status: $status)"
+}
+
 backup_current_images() {
   local image_id
 
@@ -203,6 +234,8 @@ log "Starting API and web"
 "${COMPOSE[@]}" up -d --remove-orphans api web
 wait_for_url API "http://127.0.0.1:$API_PORT/health"
 wait_for_url web "http://127.0.0.1:$WEB_PORT/"
+wait_for_service_health api
+wait_for_service_health web
 
 NGINX_SITE="/etc/nginx/sites-available/bowling.mogambo.xyz.conf"
 if [[ ! -e "$NGINX_SITE" ]]; then
