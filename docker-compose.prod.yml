@@ -1,48 +1,37 @@
 # =============================================================================
 # docker-compose.prod.yml — Production deployment for Strike Manager
-#
-# Usage:
-#   docker compose -f docker-compose.prod.yml up -d
-#
-# Prerequisites:
-#   - Create a .env file with required environment variables
-#   - See README.md for details
 # =============================================================================
 
+name: bowling-tournaments
+
 services:
-  # -------------------------------------------------------------------------
-  # PostgreSQL 16 database
-  # -------------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-bowling}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bowling}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: ${POSTGRES_DB:-bowling}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bowling}"]
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-bowling}']
       interval: 5s
       timeout: 5s
       retries: 5
     restart: unless-stopped
     networks:
-      - app-network
+      - backend-network
 
-  # -------------------------------------------------------------------------
-  # Fastify + tRPC API server
-  # -------------------------------------------------------------------------
   api:
+    image: bowling-tournaments-api:latest
     build:
       context: .
       dockerfile: Dockerfile.api
     ports:
-      - "${API_PORT:-3001}:3001"
+      - '127.0.0.1:${API_PORT:-3001}:3001'
     environment:
-      # The server reads process.env.PORT (see apps/api/src/server.ts)
       PORT: 3001
-      DATABASE_URL: postgres://${POSTGRES_USER:-bowling}:${POSTGRES_PASSWORD:-bowling}@postgres:5432/${POSTGRES_DB:-bowling}
+      DATABASE_URL: postgres://${POSTGRES_USER:-bowling}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-bowling}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
@@ -53,37 +42,72 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3001/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
     networks:
-      - app-network
+      - frontend-network
+      - backend-network
 
-  # -------------------------------------------------------------------------
-  # Next.js 15 web app
-  # -------------------------------------------------------------------------
   web:
+    image: bowling-tournaments-web:latest
     build:
       context: .
       dockerfile: Dockerfile.web
       args:
-        # ⚠️ Replace these with your actual domain or VPS IP.
-        # NEXT_PUBLIC_API_URL is used by the tRPC client in the browser.
-        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:3001/trpc}
-        - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
+        - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
     ports:
-      - "${WEB_PORT:-3000}:3000"
+      - '127.0.0.1:${WEB_PORT:-3103}:3000'
     environment:
       PORT: 3000
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/trpc}
-      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
     networks:
-      - app-network
+      - frontend-network
 
 networks:
-  app-network:
+  frontend-network:
     driver: bridge
+  backend-network:
+    driver: bridge
+    internal: true
 
 volumes:
   pgdata:
