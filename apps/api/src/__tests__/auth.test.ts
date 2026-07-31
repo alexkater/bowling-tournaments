@@ -100,6 +100,26 @@ describe('auth router', () => {
     })
   })
 
+  it('signup: creates a player without provisioning an organization', async () => {
+    const result = await caller().auth.signup({
+      ...newUser,
+      email: 'player@example.com',
+      accountType: 'player',
+    })
+
+    expect(result.profile).toMatchObject({
+      email: 'player@example.com',
+      role: 'player',
+    })
+
+    const memberships = await db
+      .select()
+      .from(allSchema.organizationMembers)
+      .where(eq(allSchema.organizationMembers.profileId, result.profile.id))
+
+    expect(memberships).toHaveLength(0)
+  })
+
   it('signup: duplicate email returns CONFLICT', async () => {
     const c = caller()
     await c.auth.signup(newUser)

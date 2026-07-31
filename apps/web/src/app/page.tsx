@@ -12,6 +12,9 @@ export default function Home() {
             <Logo className="h-8 w-auto" />
           </Link>
           <div className="flex items-center gap-6">
+            <Link href="/tournaments" className="text-sm font-medium text-steel-400 hover:text-white transition-colors">
+              Browse tournaments
+            </Link>
             <Link href="/login" className="text-sm font-medium text-steel-400 hover:text-white transition-colors">
               Sign in
             </Link>
@@ -43,10 +46,10 @@ export default function Home() {
             </p>
             <div className="mt-10 flex items-center gap-4">
               <Link href="/signup" className="group inline-flex items-center gap-2 rounded-xl bg-pin-400 px-7 py-3.5 text-base font-semibold text-white hover:bg-pin-500 transition-all shadow-xl shadow-pin-400/25">
-                Start free <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
+                Organize a tournament <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
               </Link>
-              <Link href="/login" className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-7 py-3.5 text-base font-semibold text-steel-300 hover:bg-white/5 hover:text-white transition-all">
-                Sign in <ChevronRight className="h-4 w-4" />
+              <Link href="/tournaments" className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-7 py-3.5 text-base font-semibold text-steel-300 hover:bg-white/5 hover:text-white transition-all">
+                Find a tournament <ChevronRight className="h-4 w-4" />
               </Link>
             </div>
           </div>

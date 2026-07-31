@@ -14,7 +14,10 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
 
   const loginMutation = trpc.auth.login.useMutation({
-    onSuccess: (data) => { localStorage.setItem('auth_token', data.token); router.push('/dashboard') },
+    onSuccess: (data) => {
+      localStorage.setItem('auth_token', data.token)
+      router.push(data.profile.role === 'player' ? '/tournaments' : '/dashboard')
+    },
     onError: (err) => setError(err.message),
   })
 

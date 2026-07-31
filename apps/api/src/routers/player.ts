@@ -3,70 +3,31 @@ import { eq, and, desc, ilike, or, inArray } from 'drizzle-orm'
 import { router, procedure } from '../trpc'
 import { profiles, tournamentPlayers, tournaments, squads, games, paymentTransactions } from '@bowling/db'
 import { TRPCError } from '@trpc/server'
+import { requireAuth, requireOrgAccess, requireOrgRole } from '../middleware/auth'
 
 export const playerRouter = router({
-  /**
-   * Get a player profile by ID.
-   * Returns full profile including average, usbcId, handicap, etc.
-   * Throws NOT_FOUND if the profile does not exist.
-   */
-  getProfile: procedure
-    .input(z.string())
-    .query(async ({ ctx, input }) => {
-      const [profile] = await ctx.db
-        .select()
-        .from(profiles)
-        .where(eq(profiles.id, input))
-        .limit(1)
-
-      if (!profile) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Player profile not found' })
-      }
-
-      return profile
-    }),
-
-  /**
-   * Update a player profile.
-   * Only the allowed fields (firstName, lastName, phone, usbcId, average)
-   * are accepted. Throws NOT_FOUND if the profile does not exist.
-   * Email and password changes are handled by Supabase Auth and are not
-   * permitted here.
-   */
-  updateProfile: procedure
+  /** Update only the authenticated player's profile. */
+  updateMe: procedure
+    .use(requireAuth)
     .input(z.object({
-      profileId: z.string(),
-      data: z.object({
-        firstName: z.string().min(1).max(100).optional(),
-        lastName: z.string().min(1).max(100).optional(),
-        phone: z.string().max(20).optional(),
-        usbcId: z.string().max(50).optional(),
-        average: z.number().int().min(0).max(300).optional(),
-      }),
+      firstName: z.string().min(1).max(100).optional(),
+      lastName: z.string().min(1).max(100).optional(),
+      phone: z.string().max(20).nullable().optional(),
+      usbcId: z.string().max(50).nullable().optional(),
+      average: z.number().int().min(0).max(300).nullable().optional(),
+    }).refine((data) => Object.values(data).some((value) => value !== undefined), {
+      message: 'At least one profile field is required',
     }))
     .mutation(async ({ ctx, input }) => {
-      const [existing] = await ctx.db
-        .select({ id: profiles.id })
-        .from(profiles)
-        .where(eq(profiles.id, input.profileId))
-        .limit(1)
-
-      if (!existing) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Player profile not found' })
-      }
-
-      const updateData: Record<string, unknown> = {}
-      if (input.data.firstName !== undefined) updateData.firstName = input.data.firstName
-      if (input.data.lastName !== undefined) updateData.lastName = input.data.lastName
-      if (input.data.phone !== undefined) updateData.phone = input.data.phone
-      if (input.data.usbcId !== undefined) updateData.usbcId = input.data.usbcId
-      if (input.data.average !== undefined) updateData.average = input.data.average
-
       const [updated] = await ctx.db
         .update(profiles)
-        .set(updateData)
-        .where(eq(profiles.id, input.profileId))
+        .set(input)
+        .where(eq(profiles.id, ctx.userId!))
         .returning()
+
+      if (!updated) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Player profile not found' })
+      }
 
       return updated
     }),
@@ -78,12 +39,12 @@ export const playerRouter = router({
    * Throws NOT_FOUND if the profile does not exist.
    */
   getTournaments: procedure
-    .input(z.string())
-    .query(async ({ ctx, input }) => {
+    .use(requireAuth)
+    .query(async ({ ctx }) => {
       const [profile] = await ctx.db
         .select({ id: profiles.id })
         .from(profiles)
-        .where(eq(profiles.id, input))
+        .where(eq(profiles.id, ctx.userId!))
         .limit(1)
 
       if (!profile) {
@@ -93,7 +54,7 @@ export const playerRouter = router({
       const registrations = await ctx.db
         .select()
         .from(tournamentPlayers)
-        .where(eq(tournamentPlayers.profileId, input))
+        .where(eq(tournamentPlayers.profileId, ctx.userId!))
         .orderBy(desc(tournamentPlayers.createdAt))
 
       if (registrations.length === 0) return []
@@ -167,12 +128,12 @@ export const playerRouter = router({
    * Throws NOT_FOUND if the profile does not exist.
    */
   getHistory: procedure
-    .input(z.string())
-    .query(async ({ ctx, input }) => {
+    .use(requireAuth)
+    .query(async ({ ctx }) => {
       const [profile] = await ctx.db
         .select({ id: profiles.id })
         .from(profiles)
-        .where(eq(profiles.id, input))
+        .where(eq(profiles.id, ctx.userId!))
         .limit(1)
 
       if (!profile) {
@@ -182,7 +143,7 @@ export const playerRouter = router({
       const registrations = await ctx.db
         .select()
         .from(tournamentPlayers)
-        .where(eq(tournamentPlayers.profileId, input))
+        .where(eq(tournamentPlayers.profileId, ctx.userId!))
         .orderBy(desc(tournamentPlayers.createdAt))
 
       if (registrations.length === 0) return []
@@ -323,7 +284,10 @@ export const playerRouter = router({
    * Useful for organizers to find and register players.
    */
   search: procedure
-    .input(z.string().min(1))
+    .use(requireAuth)
+    .use(requireOrgAccess)
+    .use(requireOrgRole(['owner', 'admin', 'scorer']))
+    .input(z.string().min(1).max(100))
     .query(async ({ ctx, input }) => {
       const pattern = `%${input}%`
 

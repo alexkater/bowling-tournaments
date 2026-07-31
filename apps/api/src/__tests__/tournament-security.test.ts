@@ -68,12 +68,17 @@ async function seedOrganization(profileId: string, role: MembershipRole = 'owner
   return organization
 }
 
-async function seedTournament(organizationId: string, name: string) {
+async function seedTournament(
+  organizationId: string,
+  name: string,
+  status: 'draft' | 'published' | 'in_progress' | 'completed' = 'draft',
+) {
   const [tournament] = await db
     .insert(schema.tournaments)
     .values({
       organizationId,
       name,
+      status,
       startDate: new Date('2026-08-01T00:00:00Z'),
       endDate: new Date('2026-08-03T00:00:00Z'),
     })
@@ -116,21 +121,26 @@ beforeEach(async () => {
 })
 
 describe('tournament tenant isolation', () => {
-  it('keeps public list and byId available without authentication', async () => {
+  it('exposes published tournaments publicly while hiding drafts', async () => {
     const organizationA = await seedOrganization('owner-a')
     const organizationB = await seedOrganization('owner-b')
-    const { tournament: tournamentA } = await seedTournament(organizationA.id, 'Tournament A')
-    const { tournament: tournamentB } = await seedTournament(organizationB.id, 'Tournament B')
+    const { tournament: published } = await seedTournament(
+      organizationA.id,
+      'Published Tournament',
+      'published',
+    )
+    const { tournament: draft } = await seedTournament(organizationB.id, 'Draft Tournament')
     const publicCaller = caller({ userId: null, orgId: null })
 
     const list = await publicCaller.tournament.list({ limit: 10 })
-    const detail = await publicCaller.tournament.byId(tournamentA.id)
+    const detail = await publicCaller.tournament.byId(published.id)
 
-    expect(list.items.map((item) => item.id)).toEqual(
-      expect.arrayContaining([tournamentA.id, tournamentB.id]),
-    )
-    expect(detail.id).toBe(tournamentA.id)
+    expect(list.items.map((item) => item.id)).toEqual([published.id])
+    expect(detail.id).toBe(published.id)
     expect(detail.stages).toHaveLength(1)
+    await expect(publicCaller.tournament.byId(draft.id)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
   })
 
   it('scopes organizer list to the derived organization membership', async () => {
