@@ -99,7 +99,8 @@ export const tournamentRouter = router({
           throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to create tournament' })
         }
 
-        await tx.insert(stages).values(input.stages.map((stage) => ({
+        // Insert stages
+        const createdStages = await tx.insert(stages).values(input.stages.map((stage) => ({
           tournamentId: tournament.id,
           name: stage.name,
           sortOrder: stage.order,
@@ -107,7 +108,23 @@ export const tournamentRouter = router({
           advancement: stage.advancement as Record<string, unknown>,
           squadConfig: stage.squadConfig as Record<string, unknown> | null,
           standingsScope: stage.standingsScope ?? 'per_squad',
-        })))
+        }))).returning()
+
+        // Auto-create squads for each stage based on squadConfig
+        for (const stage of createdStages) {
+          const config = (stage.squadConfig as { count?: number; label?: string }) ?? {}
+          const count = config.count ?? 1
+          const label = config.label ?? 'Squad'
+          for (let i = 1; i <= count; i++) {
+            await tx.insert(squads).values({
+              stageId: stage.id,
+              name: count === 1 ? label : `${label} ${i}`,
+              date: tournament.startDate,
+              startTime: '10:00',
+              sortOrder: i - 1,
+            })
+          }
+        }
 
         return tournament.id
       })
