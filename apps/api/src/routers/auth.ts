@@ -169,6 +169,25 @@ export const authRouter = router({
         throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Profile not found' })
       }
 
-      return profile
+      // Lookup organization membership for organizers
+      let organizationId: string | null = null
+      let organizationName: string | null = null
+      const [member] = await ctx.db
+        .select({ organizationId: organizationMembers.organizationId })
+        .from(organizationMembers)
+        .where(eq(organizationMembers.profileId, ctx.userId))
+        .limit(1)
+      
+      if (member) {
+        organizationId = member.organizationId
+        const [org] = await ctx.db
+          .select({ name: organizations.name })
+          .from(organizations)
+          .where(eq(organizations.id, member.organizationId))
+          .limit(1)
+        if (org) organizationName = org.name
+      }
+
+      return { ...profile, organizationId, organizationName }
     }),
 })
