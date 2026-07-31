@@ -68,7 +68,7 @@ bowling-tournaments/
 ## Production Deploy
 
 - Hetzner VPS: IP 178.104.71.198, SSH key ~/.ssh/nest_deploy
-- Production URL: `https://bowling.mogambo.xyz`
+- Production URL: `https://bolos.mogambo.xyz`
 - Bowling-only bindings: API `127.0.0.1:3001`, web `127.0.0.1:3103`
 - Deploy only merged `main` with `./deploy.sh`; it syncs source and invokes the locked server deploy
 - The existing database needs `./deploy.sh --baseline-migrations` exactly once; routine deploys use committed Drizzle migrations and never `push`

@@ -30,7 +30,7 @@ test('preserves existing secrets while updating public production routing', asyn
 
   await configureProductionEnv({
     envPath,
-    domain: 'bowling.mogambo.xyz',
+    domain: 'bolos.mogambo.xyz',
     apiPort: 3001,
     webPort: 3103,
   });
@@ -42,8 +42,8 @@ test('preserves existing secrets while updating public production routing', asyn
   assert.match(updated, /^JWT_SECRET=keep-this-jwt-secret$/m);
   assert.match(updated, /^API_PORT=3001$/m);
   assert.match(updated, /^WEB_PORT=3103$/m);
-  assert.match(updated, /^NEXT_PUBLIC_API_URL=https:\/\/bowling\.mogambo\.xyz\/trpc$/m);
-  assert.match(updated, /^NEXT_PUBLIC_APP_URL=https:\/\/bowling\.mogambo\.xyz$/m);
+  assert.match(updated, /^NEXT_PUBLIC_API_URL=https:\/\/bolos\.mogambo\.xyz\/trpc$/m);
+  assert.match(updated, /^NEXT_PUBLIC_APP_URL=https:\/\/bolos\.mogambo\.xyz$/m);
   assert.match(updated, /^UNRELATED_SETTING=preserve-me$/m);
 });
 
@@ -53,7 +53,7 @@ test('creates a new production env with strong secrets and restrictive permissio
 
   await configureProductionEnv({
     envPath,
-    domain: 'bowling.mogambo.xyz',
+    domain: 'bolos.mogambo.xyz',
     apiPort: 3001,
     webPort: 3103,
   });
@@ -71,7 +71,7 @@ test('creates a new production env with strong secrets and restrictive permissio
   assert.match(values.POSTGRES_PASSWORD, /^[a-f0-9]{48}$/);
   assert.match(values.JWT_SECRET, /^[a-f0-9]{64}$/);
   assert.equal(values.COMPOSE_PROJECT_NAME, 'bowling-tournaments');
-  assert.equal(values.NEXT_PUBLIC_APP_URL, 'https://bowling.mogambo.xyz');
+  assert.equal(values.NEXT_PUBLIC_APP_URL, 'https://bolos.mogambo.xyz');
   assert.equal((await stat(envPath)).mode & 0o777, 0o600);
 
   for (const key of ['POSTGRES_USER', 'POSTGRES_PASSWORD', 'POSTGRES_DB', 'JWT_SECRET']) {
@@ -86,7 +86,7 @@ test('rejects an invalid production domain before writing the env file', async (
   await assert.rejects(
     configureProductionEnv({
       envPath,
-      domain: 'https://bowling.mogambo.xyz/unsafe',
+      domain: 'https://bolos.mogambo.xyz/unsafe',
       apiPort: 3001,
       webPort: 3103,
     }),
@@ -102,7 +102,7 @@ test('rejects invalid production ports', async () => {
   await assert.rejects(
     configureProductionEnv({
       envPath: path.join(directory, 'api.env'),
-      domain: 'bowling.mogambo.xyz',
+      domain: 'bolos.mogambo.xyz',
       apiPort: 0,
       webPort: 3103,
     }),
@@ -111,7 +111,7 @@ test('rejects invalid production ports', async () => {
   await assert.rejects(
     configureProductionEnv({
       envPath: path.join(directory, 'web.env'),
-      domain: 'bowling.mogambo.xyz',
+      domain: 'bolos.mogambo.xyz',
       apiPort: 3001,
       webPort: 70000,
     }),
@@ -129,7 +129,7 @@ test('CLI configures production without printing secrets', async () => {
     '--file',
     envPath,
     '--domain',
-    'bowling.mogambo.xyz',
+    'bolos.mogambo.xyz',
     '--api-port',
     '3001',
     '--web-port',

@@ -5,7 +5,7 @@
 - This repository is the only product scope for work initiated from the Bowling Tournaments Telegram group.
 - Canonical local workspace: `/Users/openclaw-runner/bowling-tournaments`.
 - Canonical repository: `alexkater/bowling-tournaments`.
-- Production scope: `/opt/bowling-tournaments` and `bowling.mogambo.xyz` on `nest_deploy`.
+- Production scope: `/opt/bowling-tournaments` and `bolos.mogambo.xyz` on `nest_deploy`.
 - Do not read, search, summarize, modify, stop, restart, or deploy any other project. Shared-server inspection is limited to service names, listening ports, domains, and container status needed to prevent collisions. Never inspect another project's source, database, environment, logs, credentials, or business data.
 - Never read or print `.env`, private keys, tokens, database dumps, or production credentials. Verify secret presence or permissions without exposing values.
 
@@ -50,7 +50,7 @@ Direct pushes to `main` are forbidden except for an explicitly authorized emerge
 
 ## Production safety
 
-- Production domain: `bowling.mogambo.xyz`.
+- Production domain: `bolos.mogambo.xyz`.
 - Bowling-only bindings: API `127.0.0.1:3001`, web `127.0.0.1:3103`.
 - Do not reuse or change another project's port, Nginx site, directory, container, volume, or process.
 - Production secrets remain only in `/opt/bowling-tournaments/.env`. Normal deploys must preserve them; never generate or rotate them on each deploy.
@@ -58,5 +58,5 @@ Direct pushes to `main` are forbidden except for an explicitly authorized emerge
 - Production schema changes use committed Drizzle migrations. `drizzle-kit push` is forbidden in routine production deploys; the existing pre-journal database may use the reviewed one-time baseline only.
 - After that baseline, migrations `0000` through `0002` are immutable; every later schema change must add a new migration.
 - Do not delete the PostgreSQL volume or restore a database dump without explicit authorization.
-- TLS may be enabled only after DNS for `bowling.mogambo.xyz` resolves to the intended server and the HTTP route passes its health check.
+- TLS may be enabled only after DNS for `bolos.mogambo.xyz` resolves to the intended server and the HTTP route passes its health check.
 - The first deploy installs the Nginx site. Later deploys must preserve the server copy because Certbot manages TLS there; routing changes require an explicit reviewed Nginx update.

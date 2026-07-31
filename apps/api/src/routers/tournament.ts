@@ -261,7 +261,14 @@ export const tournamentRouter = router({
         })
         .returning()
         .catch((error: unknown) => {
-          if (error instanceof postgres.PostgresError && error.code === '23505') {
+          const postgresError = error instanceof postgres.PostgresError
+            ? error
+            : typeof error === 'object' && error !== null && 'cause' in error
+              && error.cause instanceof postgres.PostgresError
+              ? error.cause
+              : null
+
+          if (postgresError?.code === '23505') {
             throw new TRPCError({
               code: 'CONFLICT',
               message: 'Player is already registered in this tournament',

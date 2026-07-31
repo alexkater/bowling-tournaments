@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 umask 077
 
-readonly DOMAIN="bowling.mogambo.xyz"
+readonly DOMAIN="bolos.mogambo.xyz"
 readonly DEPLOY_DIR="/opt/bowling-tournaments"
 readonly BACKUP_DIR="/opt/backups/bowling-tournaments"
 readonly API_PORT="3001"
@@ -237,15 +237,34 @@ wait_for_url web "http://127.0.0.1:$WEB_PORT/"
 wait_for_service_health api
 wait_for_service_health web
 
-NGINX_SITE="/etc/nginx/sites-available/bowling.mogambo.xyz.conf"
+NGINX_SITE="/etc/nginx/sites-available/bolos.mogambo.xyz.conf"
+NGINX_ENABLED="/etc/nginx/sites-enabled/bolos.mogambo.xyz.conf"
+LEGACY_NGINX_SITE="/etc/nginx/sites-available/bowling.mogambo.xyz.conf"
+LEGACY_NGINX_ENABLED="/etc/nginx/sites-enabled/bowling.mogambo.xyz.conf"
+LEGACY_NGINX_WAS_ENABLED=false
+
 if [[ ! -e "$NGINX_SITE" ]]; then
   log "Installing isolated Nginx route for $DOMAIN"
-  install -m 0644 infra/nginx/bowling.mogambo.xyz.conf "$NGINX_SITE"
+  install -m 0644 infra/nginx/bolos.mogambo.xyz.conf "$NGINX_SITE"
 else
   log "Preserving existing Nginx route (including any Certbot-managed TLS)"
 fi
-ln -sfn /etc/nginx/sites-available/bowling.mogambo.xyz.conf /etc/nginx/sites-enabled/bowling.mogambo.xyz.conf
-nginx -t
+
+if [[ -L "$LEGACY_NGINX_ENABLED" ]]; then
+  log "Disabling the legacy Bowling Nginx route"
+  LEGACY_NGINX_WAS_ENABLED=true
+  rm -f "$LEGACY_NGINX_ENABLED"
+fi
+ln -sfn "$NGINX_SITE" "$NGINX_ENABLED"
+
+if ! nginx -t; then
+  rm -f "$NGINX_ENABLED"
+  if [[ "$LEGACY_NGINX_WAS_ENABLED" == true ]]; then
+    ln -sfn "$LEGACY_NGINX_SITE" "$LEGACY_NGINX_ENABLED"
+  fi
+  nginx -t || true
+  fail "Nginx validation failed; restored the legacy Bowling route"
+fi
 systemctl reload nginx
 
 DEPLOY_STARTED=false

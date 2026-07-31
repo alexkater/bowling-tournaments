@@ -23,8 +23,8 @@ jobs:
     env:
       POSTGRES_PASSWORD: ci-only-not-a-production-secret
       JWT_SECRET: ci-only-not-a-production-secret
-      NEXT_PUBLIC_API_URL: https://bowling.mogambo.xyz/trpc
-      NEXT_PUBLIC_APP_URL: https://bowling.mogambo.xyz
+      NEXT_PUBLIC_API_URL: https://bolos.mogambo.xyz/trpc
+      NEXT_PUBLIC_APP_URL: https://bolos.mogambo.xyz
     steps:
       - uses: actions/checkout@v4
       - name: Validate production Compose

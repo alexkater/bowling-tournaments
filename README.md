@@ -89,7 +89,7 @@ pnpm --filter @bowling/web exec playwright test
 
 Production is intentionally limited to the bowling stack on `nest_deploy`:
 
-- **Domain:** `bowling.mogambo.xyz`
+- **Domain:** `bolos.mogambo.xyz`
 - **API:** `127.0.0.1:3001`
 - **Web:** `127.0.0.1:3103`
 - **Directory:** `/opt/bowling-tournaments`

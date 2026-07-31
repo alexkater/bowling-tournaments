@@ -7,7 +7,7 @@ This document is the canonical production runbook for Strike Manager / Bowling T
 - Repository: `alexkater/bowling-tournaments`
 - Server: `nest_deploy` (`178.104.71.198`)
 - Deployment directory: `/opt/bowling-tournaments`
-- Public domain: `bowling.mogambo.xyz`
+- Public domain: `bolos.mogambo.xyz`
 - API binding: `127.0.0.1:3001`
 - Web binding: `127.0.0.1:3103`
 
@@ -66,22 +66,22 @@ On failure after the build begins, the script restores the previous application-
 Create an A record:
 
 ```text
-bowling.mogambo.xyz -> 178.104.71.198
+bolos.mogambo.xyz -> 178.104.71.198
 ```
 
 The first deploy installs an HTTP virtual host. Before requesting a certificate, verify DNS and HTTP routing:
 
 ```bash
-dig +short bowling.mogambo.xyz A
-curl --resolve bowling.mogambo.xyz:80:178.104.71.198 \
-  http://bowling.mogambo.xyz/
+dig +short bolos.mogambo.xyz A
+curl --resolve bolos.mogambo.xyz:80:178.104.71.198 \
+  http://bolos.mogambo.xyz/
 ```
 
 Only after both checks succeed, enable TLS on the server:
 
 ```bash
-certbot --nginx -d bowling.mogambo.xyz
-curl --fail --show-error https://bowling.mogambo.xyz/
+certbot --nginx -d bolos.mogambo.xyz
+curl --fail --show-error https://bolos.mogambo.xyz/
 ```
 
 Certbot owns the installed Nginx site after this point. Routine deploys preserve that server-side file so they cannot remove TLS. Any routing change requires an explicit reviewed Nginx update.
@@ -95,7 +95,7 @@ cd /opt/bowling-tournaments
 docker compose -f docker-compose.prod.yml ps
 curl --fail --show-error http://127.0.0.1:3001/health
 curl --fail --show-error http://127.0.0.1:3103/
-curl --fail --show-error https://bowling.mogambo.xyz/
+curl --fail --show-error https://bolos.mogambo.xyz/
 ```
 
 Verify that the running source or release identifier matches the merged `main` SHA recorded for the deployment. Never print `.env` or inspect another stack while diagnosing a collision.

@@ -19,8 +19,8 @@
   },
   "dependencies": {
     "@bowling/shared": "workspace:*",
-    "drizzle-kit": "^0.30.0",
-    "drizzle-orm": "^0.38.0",
+    "drizzle-kit": "^0.31.10",
+    "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.0"
   },
   "devDependencies": {
