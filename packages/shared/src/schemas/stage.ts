@@ -138,6 +138,7 @@ export const TournamentBaseSchema = z.object({
   description: z.string().max(2000).nullable().default(null),
   centerId: z.string().uuid().nullable().default(null),
   category: z.enum(['open', 'women', 'senior', 'youth', 'mixed']).default('open'),
+  status: z.enum(['draft', 'published', 'in_progress', 'completed']).default('draft'),
   maxPlayers: z.number().nullable().default(null),
   allowWaitlist: z.boolean().default(true),
   startDate: z.string().datetime(),

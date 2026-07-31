@@ -84,6 +84,7 @@ export const tournamentRouter = router({
             name: input.name,
             description: input.description,
             category: input.category,
+            status: input.status,
             maxPlayers: input.maxPlayers,
             allowWaitlist: input.allowWaitlist,
             startDate: new Date(input.startDate),
@@ -157,6 +158,7 @@ export const tournamentRouter = router({
       if (input.data.name !== undefined) updateData.name = input.data.name
       if (input.data.description !== undefined) updateData.description = input.data.description
       if (input.data.category !== undefined) updateData.category = input.data.category
+      if (input.data.status !== undefined) updateData.status = input.data.status
       if (input.data.maxPlayers !== undefined) updateData.maxPlayers = input.data.maxPlayers
       if (input.data.allowWaitlist !== undefined) updateData.allowWaitlist = input.data.allowWaitlist
       if (input.data.startDate !== undefined) updateData.startDate = new Date(input.data.startDate)
