@@ -96,6 +96,15 @@ export const authRouter = router({
 
       const token = signToken(profile.id, jwtSecret)
 
+      // ── Welcome email (fire and forget) ──
+      import('../services/email').then(({ sendEmail }) => {
+        sendEmail({
+          db: ctx.db, profileId: profile.id, to: profile.email,
+          template: 'welcome',
+          data: { firstName: profile.firstName, role: profile.role },
+        }).catch(() => {})
+      }).catch(() => {})
+
       return {
         token,
         profile: {

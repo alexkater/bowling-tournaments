@@ -102,6 +102,44 @@ export const enrollmentRouter = router({
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to register' })
       }
 
+      // ── Notifications & email ──
+      const { createNotification } = await import('../services/notifications')
+      const { sendEmail } = await import('../services/email')
+
+      const [playerProfile] = await db
+        .select({ email: profiles.email, firstName: profiles.firstName })
+        .from(profiles)
+        .where(eq(profiles.id, userId!))
+        .limit(1)
+
+      const notifTitle = status === 'confirmed'
+        ? `Inscripción confirmada en ${tournament.name}`
+        : `Lista de espera en ${tournament.name}`
+
+      const notifBody = status === 'confirmed'
+        ? 'Tu inscripción ha sido confirmada. ¡Buena suerte!'
+        : 'El torneo está lleno. Te avisaremos si se libera un cupo.'
+
+      await createNotification({
+        db, profileId: userId!,
+        type: status === 'confirmed' ? 'enrollment_confirmed' : 'waitlisted',
+        title: notifTitle,
+        body: notifBody,
+        metadata: { tournamentId: input.tournamentId },
+      })
+
+      if (playerProfile?.email) {
+        await sendEmail({
+          db, profileId: userId!, to: playerProfile.email,
+          template: status === 'confirmed' ? 'enrollment_confirmed' : 'waitlisted',
+          data: {
+            firstName: playerProfile.firstName ?? '',
+            tournamentName: tournament.name,
+            startDate: tournament.startDate?.toISOString().split('T')[0] ?? '',
+          },
+        })
+      }
+
       return entry
     }),
 
@@ -155,6 +193,33 @@ export const enrollmentRouter = router({
             .update(tournamentPlayers)
             .set({ status: 'confirmed' })
             .where(eq(tournamentPlayers.id, waitlisted.id))
+
+          // Notify promoted player
+          const { createNotification } = await import('../services/notifications')
+          const [promotedProfile] = await db
+            .select({ email: profiles.email, firstName: profiles.firstName })
+            .from(profiles)
+            .where(eq(profiles.id, waitlisted.profileId))
+            .limit(1)
+
+          await createNotification({
+            db, profileId: waitlisted.profileId,
+            type: 'enrollment_confirmed',
+            title: `¡Cupo liberado en ${input.tournamentId}!`,
+            body: 'Pasaste de lista de espera a confirmado. ¡Buena suerte!',
+            metadata: { tournamentId: input.tournamentId },
+          })
+
+          if (promotedProfile?.email) {
+            const { sendEmail } = await import('../services/email')
+            // Lightweight tournament name lookup
+            const [t] = await db.select({ name: tournaments.name }).from(tournaments).where(eq(tournaments.id, input.tournamentId)).limit(1)
+            await sendEmail({
+              db, profileId: waitlisted.profileId, to: promotedProfile.email,
+              template: 'enrollment_confirmed',
+              data: { firstName: promotedProfile.firstName ?? '', tournamentName: t?.name ?? '', startDate: '' },
+            })
+          }
         }
       }
 

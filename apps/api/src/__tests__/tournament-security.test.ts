@@ -272,9 +272,7 @@ describe('tournament tenant isolation', () => {
 
     await db.insert(schema.tournamentPlayers).values(registration)
 
-    await expect(db.insert(schema.tournamentPlayers).values(registration)).rejects.toMatchObject({
-      cause: { code: '23505' },
-    })
+    await expect(db.insert(schema.tournamentPlayers).values(registration)).rejects.toThrow('duplicate key')
   })
 
   it('rejects duplicate organization memberships at the database boundary', async () => {
@@ -287,6 +285,6 @@ describe('tournament tenant isolation', () => {
 
     await expect(
       db.insert(schema.organizationMembers).values(duplicateMembership),
-    ).rejects.toMatchObject({ cause: { code: '23505' } })
+    ).rejects.toThrow('duplicate key')
   })
 })

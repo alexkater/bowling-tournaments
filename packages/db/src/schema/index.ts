@@ -9,3 +9,4 @@ export { bracketPools, bracketPoolsRelations, bracketRounds, bracketRoundsRelati
 export { sidepots, sidepotsRelations, sidepotEntries, sidepotEntriesRelations } from './sidepots'
 export { paymentTransactions, paymentTransactionsRelations } from './payments'
 export { userCredentials, userCredentialsRelations } from './user_credentials'
+export { notifications, emailLogs } from './communications'

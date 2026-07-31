@@ -29,7 +29,14 @@ function caller(userId?: string) {
 // ─── Cleanup before each test ─────────────────────────────────────
 
 beforeEach(async () => {
-  await queryClient`TRUNCATE profiles CASCADE`
+  // Delete in reverse dependency order; ignore permission errors on new tables
+  for (const tbl of ['email_logs', 'notifications']) {
+    try { await queryClient.unsafe(`DELETE FROM ${tbl}`) } catch {}
+  }
+  await queryClient`DELETE FROM tournament_players`
+  await queryClient`DELETE FROM organization_members`
+  await queryClient`DELETE FROM user_credentials`
+  await queryClient`DELETE FROM profiles`
 })
 
 // ─── Tests ─────────────────────────────────────────────────────────

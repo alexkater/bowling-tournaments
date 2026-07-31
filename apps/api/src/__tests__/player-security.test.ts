@@ -21,17 +21,17 @@ const caller = (userId: string | null = null, orgId: string | null = null) =>
   createCaller({ db, userId, orgId })
 
 async function resetDatabase() {
-  await db.execute(sql`
-    TRUNCATE TABLE
-      profiles,
-      organizations,
-      organization_members,
-      tournaments,
-      stages,
-      squads,
-      tournament_players
-    RESTART IDENTITY CASCADE
-  `)
+  // Use DELETE instead of TRUNCATE to avoid cascading to tables the test role can't access
+  await db.execute(sql`DELETE FROM tournament_players`)
+  await db.execute(sql`DELETE FROM squads`)
+  await db.execute(sql`DELETE FROM stages`)
+  await db.execute(sql`DELETE FROM tournaments`)
+  await db.execute(sql`DELETE FROM organization_members`)
+  await db.execute(sql`DELETE FROM organizations`)
+  await db.execute(sql`DELETE FROM profiles`)
+  for (const tbl of ['email_logs', 'notifications']) {
+    try { await db.execute(sql`DELETE FROM ${sql.raw(tbl)}`) } catch {}
+  }
 }
 
 async function seedProfile(id: string, role: 'player' | 'organizer' = 'player') {

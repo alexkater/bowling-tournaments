@@ -6,6 +6,7 @@ import { sidepotRouter } from './sidepot'
 import { authRouter } from './auth'
 import { playerRouter } from './player'
 import { standingsRouter } from './standings'
+import { notificationRouter } from './notification'
 import { enrollmentRouter } from './enrollment'
 
 export const appRouter = router({
@@ -17,6 +18,7 @@ export const appRouter = router({
   player: playerRouter,
   standings: standingsRouter,
   enrollment: enrollmentRouter,
+  notification: notificationRouter,
 })
 
 export type AppRouter = typeof appRouter

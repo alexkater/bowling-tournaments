@@ -195,9 +195,11 @@ describe('squad router', () => {
     })
 
     const squads = await c.squad.list({ tournamentId })
-    expect(squads).toHaveLength(2)
-    expect(squads[0]!.name).toBe('Squad A')
-    expect(squads[1]!.name).toBe('Squad B')
+    // Auto-created squad (from tournament.create) + 2 manual
+    expect(squads).toHaveLength(3)
+    expect(squads[0]!.name).toBe('Squad') // auto-created
+    expect(squads[1]!.name).toBe('Squad A')
+    expect(squads[2]!.name).toBe('Squad B')
   })
 
   it('enters a score for a player → saves with handicap', async () => {
