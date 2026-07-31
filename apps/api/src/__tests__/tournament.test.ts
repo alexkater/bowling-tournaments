@@ -187,7 +187,11 @@ describe('tournament router', () => {
         endDate: new Date('2026-06-03').toISOString(),
         registrationDeadline: null,
         stages: [makeStage('FORCE_STAGE_ROLLBACK', 0, 'final')],
-      })).rejects.toThrow(/forced stage insert failure/i)
+      })).rejects.toMatchObject({
+        cause: {
+          cause: { message: expect.stringMatching(/forced stage insert failure/i) },
+        },
+      })
 
       const saved = await db
         .select({ id: allSchema.tournaments.id })
