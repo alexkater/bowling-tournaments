@@ -20,6 +20,7 @@ test('migration plan contains every journal entry with a stable hash', async () 
       '0000_add_center_id',
       '0001_backfill_organizer_organizations',
       '0002_add_tenant_integrity_constraints',
+      '0003_yummy_frank_castle',
     ],
   );
   assert.ok(plan.every((migration) => /^[a-f0-9]{64}$/.test(migration.hash)));

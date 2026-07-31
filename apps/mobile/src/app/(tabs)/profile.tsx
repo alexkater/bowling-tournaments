@@ -34,7 +34,7 @@ export default function ProfileScreen() {
 
       // Fetch tournament history count
       try {
-        const history = await trpc.player.getTournaments.query(me.id)
+        const history = await trpc.player.getTournaments.query()
         setTournamentCount(history.length)
       } catch {
         setTournamentCount(0)

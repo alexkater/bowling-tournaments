@@ -36,6 +36,7 @@ export const authRouter = router({
       password: z.string().min(6),
       firstName: z.string().min(1),
       lastName: z.string().min(1),
+      accountType: z.enum(['organizer', 'player']).default('organizer'),
     }))
     .mutation(async ({ ctx, input }) => {
       const jwtSecret = getJwtSecret()
@@ -62,7 +63,7 @@ export const authRouter = router({
             email: input.email,
             firstName: input.firstName,
             lastName: input.lastName,
-            role: 'organizer',
+            role: input.accountType,
           })
           .returning()
 
@@ -76,17 +77,19 @@ export const authRouter = router({
           passwordHash,
         })
 
-        await tx.insert(organizations).values({
-          id: organizationId,
-          name: organizationName,
-          slug: `organization-${organizationId}`,
-        })
+        if (input.accountType === 'organizer') {
+          await tx.insert(organizations).values({
+            id: organizationId,
+            name: organizationName,
+            slug: `organization-${organizationId}`,
+          })
 
-        await tx.insert(organizationMembers).values({
-          organizationId,
-          profileId,
-          role: 'owner',
-        })
+          await tx.insert(organizationMembers).values({
+            organizationId,
+            profileId,
+            role: 'owner',
+          })
+        }
 
         return createdProfile
       })
@@ -100,6 +103,7 @@ export const authRouter = router({
           firstName: profile.firstName,
           lastName: profile.lastName,
           email: profile.email,
+          role: profile.role,
         },
       }
     }),
@@ -144,6 +148,7 @@ export const authRouter = router({
           firstName: profile.firstName,
           lastName: profile.lastName,
           email: profile.email,
+          role: profile.role,
         },
       }
     }),

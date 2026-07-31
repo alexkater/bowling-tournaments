@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { trpc } from '@/lib/trpc-provider'
@@ -13,10 +13,20 @@ export default function SignupPage() {
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [accountType, setAccountType] = useState<'organizer' | 'player'>('organizer')
   const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('type') === 'player') {
+      setAccountType('player')
+    }
+  }, [])
+
   const signupMutation = trpc.auth.signup.useMutation({
-    onSuccess: (data) => { localStorage.setItem('auth_token', data.token); router.push('/dashboard') },
+    onSuccess: (data) => {
+      localStorage.setItem('auth_token', data.token)
+      router.push(data.profile.role === 'player' ? '/tournaments' : '/dashboard')
+    },
     onError: (err) => setError(err.message),
   })
 
@@ -33,7 +43,13 @@ export default function SignupPage() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setError(null)
     const v = validate(); if (v) { setError(v); return }
-    signupMutation.mutate({ firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim(), password })
+    signupMutation.mutate({
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      email: email.trim(),
+      password,
+      accountType,
+    })
   }
 
   return (
@@ -61,7 +77,24 @@ export default function SignupPage() {
           <div className="rounded-2xl border border-white/5 bg-ink-800/50 p-8">
             <h1 className="text-2xl font-bold text-white">Create your account</h1>
             <p className="mt-1 text-sm text-steel-500">Free during beta. Set up in under a minute.</p>
-            <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+            <div className="mt-6 grid grid-cols-2 gap-2 rounded-xl bg-ink-900 p-1" role="group" aria-label="Account type">
+              {(['player', 'organizer'] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  aria-pressed={accountType === type}
+                  onClick={() => setAccountType(type)}
+                  className={`rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors ${
+                    accountType === type
+                      ? 'bg-pin-400 text-white'
+                      : 'text-steel-400 hover:text-white'
+                  }`}
+                >
+                  {type === 'player' ? 'I am a player' : 'I organize tournaments'}
+                </button>
+              ))}
+            </div>
+            <form onSubmit={handleSubmit} className="mt-5 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="firstName" className="block text-sm font-medium text-steel-300">First name</label>

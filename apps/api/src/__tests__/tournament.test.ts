@@ -225,7 +225,7 @@ describe('tournament router', () => {
       ],
     })
 
-    const tournament = await c.tournament.byId(id)
+    const tournament = await c.tournament.organizerById(id)
     expect(tournament.id).toBe(id)
     expect(tournament.name).toBe('Summer Championship')
     expect(tournament.stages).toHaveLength(2)
@@ -239,7 +239,7 @@ describe('tournament router', () => {
 
     // Create 3 tournaments
     for (let i = 0; i < 3; i++) {
-      await c.tournament.create({
+      const { id } = await c.tournament.create({
         name: `Tournament ${i + 1}`,
         description: null,
         centerId: dummyCenterId,
@@ -251,6 +251,10 @@ describe('tournament router', () => {
         registrationDeadline: null,
         stages: [makeStage('Qualifying', 0, 'final')],
       })
+      await db
+        .update(allSchema.tournaments)
+        .set({ status: 'published' })
+        .where(eq(allSchema.tournaments.id, id))
     }
 
     // Fetch with limit=2 → returns 2 items, nextCursor present (more exist)
@@ -291,7 +295,7 @@ describe('tournament router', () => {
     expect(updateResult.success).toBe(true)
 
     // Verify
-    const updated = await c.tournament.byId(id)
+    const updated = await c.tournament.organizerById(id)
     expect(updated.name).toBe('Updated Name')
   })
 

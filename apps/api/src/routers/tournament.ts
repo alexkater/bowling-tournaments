@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { eq, desc, and } from 'drizzle-orm'
+import { eq, desc, and, inArray } from 'drizzle-orm'
 import { router, procedure } from '../trpc'
 import { TournamentBaseSchema, validateTournament } from '@bowling/shared'
 import { tournaments, stages, tournamentPlayers, squads, profiles } from '@bowling/db'
@@ -12,23 +12,15 @@ import { organizerByIdProcedure, organizerListProcedure } from './tournament-org
 export const tournamentRouter = router({
   list: procedure
     .input(z.object({
-      status: z.string().optional(),
+      status: z.enum(['published', 'in_progress', 'completed']).default('published'),
       limit: z.number().default(20),
       cursor: z.string().optional(),
     }))
     .query(async ({ ctx, input }) => {
-      const conditions = []
-      if (input.status) {
-        conditions.push(eq(tournaments.status, input.status))
-      }
-      if (ctx.orgId) {
-        conditions.push(eq(tournaments.organizationId, ctx.orgId))
-      }
-
       const items = await ctx.db
         .select()
         .from(tournaments)
-        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .where(eq(tournaments.status, input.status))
         .orderBy(desc(tournaments.createdAt))
         .limit(input.limit)
 
@@ -44,7 +36,12 @@ export const tournamentRouter = router({
       const tournament = await ctx.db
         .select()
         .from(tournaments)
-        .where(eq(tournaments.id, input))
+        .where(
+          and(
+            eq(tournaments.id, input),
+            inArray(tournaments.status, ['published', 'in_progress', 'completed']),
+          ),
+        )
         .limit(1)
 
       if (!tournament.length) {

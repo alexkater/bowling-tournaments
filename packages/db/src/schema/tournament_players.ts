@@ -18,6 +18,7 @@ export const tournamentPlayers = pgTable(
     teamId: text(),
     lane: integer(),
     checkedIn: boolean().notNull().default(false),
+    status: text().notNull().default('confirmed'), // 'confirmed' | 'waitlisted'
     eventEntries: jsonb().$type<Array<{
       eventType: 'singles' | 'doubles' | 'trios' | 'teams' | 'all_events'
       partners: string[]
