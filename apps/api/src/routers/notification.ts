@@ -81,7 +81,7 @@ export const notificationRouter = router({
   list: procedure
     .use(requireAuth)
     .input(z.object({
-      limit: z.number().default(50),
+      limit: z.number().int().min(1).max(100).default(50),
       unreadOnly: z.boolean().default(false),
     }))
     .query(async ({ ctx, input }) => {

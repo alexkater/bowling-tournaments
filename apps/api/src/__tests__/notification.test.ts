@@ -74,4 +74,10 @@ describe('notification router', () => {
 
     expect(items.map((item) => item.id)).toEqual(['n1'])
   })
+
+  it('rejects unbounded notification list requests', async () => {
+    await expect(
+      createCaller('profile-1').notification.list({ limit: 101, unreadOnly: false }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  })
 })
