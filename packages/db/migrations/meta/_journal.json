@@ -36,6 +36,20 @@
       "when": 1785532702869,
       "tag": "0004_numerous_wolfpack",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785596125182,
+      "tag": "0005_easy_slapstick",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785597542155,
+      "tag": "0006_little_molecule_man",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,1 @@
+CREATE INDEX "email_logs_due_idx" ON "email_logs" USING btree ("status","nextAttemptAt","createdAt");

@@ -105,7 +105,7 @@ jobs:
       - name: Install Chromium
         run: pnpm --filter=@bowling/web exec playwright install --with-deps chromium
       - name: Run critical browser journeys
-        run: pnpm --filter=@bowling/web exec playwright test e2e/player-onboarding.spec.ts
+        run: pnpm --filter=@bowling/web exec playwright test e2e/player-onboarding.spec.ts e2e/organizer-announcement.spec.ts
       - name: Upload Playwright evidence
         if: failure()
         uses: actions/upload-artifact@v4

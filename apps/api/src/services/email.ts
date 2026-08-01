@@ -1,86 +1,208 @@
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
+import { eq, sql } from 'drizzle-orm'
 import { emailLogs } from '@bowling/db'
 import crypto from 'crypto'
 
-type EmailTemplate = 'welcome' | 'enrollment_confirmed' | 'waitlisted' | 'tournament_reminder' | 'results' | 'cancellation'
+export type EmailTemplate =
+  | 'welcome'
+  | 'enrollment_confirmed'
+  | 'waitlisted'
+  | 'tournament_reminder'
+  | 'results'
+  | 'cancellation'
+  | 'announcement'
 
-interface SendEmailParams {
+export interface QueueEmailParams {
   db: PostgresJsDatabase<any>
+  idempotencyKey: string
   profileId?: string
   to: string
   template: EmailTemplate
   data: Record<string, string>
+  maxAttempts?: number
 }
 
-export async function sendEmail(input: SendEmailParams) {
-  const id = crypto.randomUUID()
-  const apiKey = process.env.RESEND_API_KEY
-
-  // Log attempt (best-effort, table may not exist in test env)
-  try {
-    await input.db.insert(emailLogs).values({
-      id,
+export async function queueEmail(input: QueueEmailParams) {
+  const [created] = await input.db
+    .insert(emailLogs)
+    .values({
+      id: crypto.randomUUID(),
+      idempotencyKey: input.idempotencyKey,
       profileId: input.profileId,
       to: input.to,
       template: input.template,
-      status: 'pending',
+      payload: input.data,
+      maxAttempts: input.maxAttempts ?? 5,
     })
-  } catch {}
+    .onConflictDoNothing({ target: emailLogs.idempotencyKey })
+    .returning()
 
-  if (!apiKey) {
-    console.log(`[email] Would send "${input.template}" to ${input.to} (RESEND_API_KEY not set)`)
-    return { id, status: 'pending' }
+  if (created) return created
+
+  const [existing] = await input.db
+    .select()
+    .from(emailLogs)
+    .where(eq(emailLogs.idempotencyKey, input.idempotencyKey))
+    .limit(1)
+
+  if (!existing) throw new Error('Email outbox idempotency lookup failed')
+  return existing
+}
+
+interface ProcessEmailOutboxOptions {
+  db: PostgresJsDatabase<any>
+  apiKey?: string
+  from?: string
+  fetchImpl?: typeof fetch
+  now?: Date
+  limit?: number
+}
+
+interface ClaimedEmail {
+  id: string
+  idempotencyKey: string
+  to: string
+  template: EmailTemplate
+  payload: Record<string, string>
+  attempts: number
+  maxAttempts: number
+}
+
+export async function processEmailOutboxBatch(options: ProcessEmailOutboxOptions) {
+  if (!options.apiKey) {
+    return { claimed: 0, sent: 0, failed: 0, reason: 'provider_unconfigured' as const }
   }
 
-  // Build HTML from template + data
-  const html = renderTemplate(input.template, input.data)
+  const now = options.now ?? new Date()
+  const nowIso = now.toISOString()
+  const leaseCutoffIso = new Date(now.getTime() - 5 * 60_000).toISOString()
+  const limit = Math.min(Math.max(options.limit ?? 20, 1), 100)
+  const claimedResult = await options.db.execute(sql`
+    WITH candidates AS (
+      SELECT id
+      FROM email_logs
+      WHERE (
+          (status = 'pending' AND "nextAttemptAt" <= ${nowIso}::timestamptz)
+          OR (status = 'processing' AND "lockedAt" <= ${leaseCutoffIso}::timestamptz)
+        )
+        AND attempts < "maxAttempts"
+      ORDER BY "createdAt" ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT ${limit}
+    )
+    UPDATE email_logs AS delivery
+    SET status = 'processing',
+      "lockedAt" = ${nowIso}::timestamptz,
+      "updatedAt" = ${nowIso}::timestamptz
+    FROM candidates
+    WHERE delivery.id = candidates.id
+    RETURNING delivery.id,
+      delivery."idempotencyKey",
+      delivery."to",
+      delivery.template,
+      delivery.payload,
+      delivery.attempts,
+      delivery."maxAttempts"
+  `)
+  const claimed = Array.from(claimedResult as unknown as Iterable<ClaimedEmail>)
+  const fetchImpl = options.fetchImpl ?? fetch
+  let sent = 0
+  let failed = 0
 
-  try {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: 'Strike Manager <noreply@bolos.mogambo.xyz>',
-        to: input.to,
-        subject: getSubject(input.template, input.data),
-        html,
-      }),
-    })
-
-    const status = res.ok ? 'sent' : 'failed'
-    const error = res.ok ? null : await res.text()
-
-    await input.db.insert(emailLogs).values({
-      id,
-      profileId: input.profileId,
-      to: input.to,
-      template: input.template,
-      status,
-      error: error?.slice(0, 500),
-      sentAt: status === 'sent' ? new Date() : null,
-    })
-
-    if (!res.ok) {
-      console.error(`[email] Failed to send "${input.template}" to ${input.to}: ${error?.slice(0, 200)}`)
+  for (const delivery of claimed) {
+    const attempts = delivery.attempts + 1
+    const recordFailure = async (message: string) => {
+      const backoffMs = Math.min(60_000 * (2 ** (attempts - 1)), 60 * 60_000)
+      await options.db
+        .update(emailLogs)
+        .set({
+          status: attempts >= delivery.maxAttempts ? 'failed' : 'pending',
+          attempts,
+          nextAttemptAt: new Date(now.getTime() + backoffMs),
+          error: message.slice(0, 500),
+          lockedAt: null,
+          updatedAt: now,
+        })
+        .where(eq(emailLogs.id, delivery.id))
+      failed += 1
     }
 
-    return { id, status }
-  } catch (err: any) {
-    await input.db.insert(emailLogs).values({
-      id,
-      profileId: input.profileId,
-      to: input.to,
-      template: input.template,
-      status: 'failed',
-      error: err.message?.slice(0, 500),
-    })
+    try {
+      const response = await fetchImpl('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${options.apiKey}`,
+          'Content-Type': 'application/json',
+          'Idempotency-Key': delivery.idempotencyKey,
+        },
+        body: JSON.stringify({
+          from: options.from ?? 'Strike Manager <noreply@bolos.mogambo.xyz>',
+          to: delivery.to,
+          subject: getSubject(delivery.template, delivery.payload),
+          html: renderTemplate(delivery.template, delivery.payload),
+        }),
+      })
 
-    console.error(`[email] Error sending "${input.template}": ${err.message}`)
-    return { id, status: 'failed' }
+      if (!response.ok) {
+        await recordFailure(await response.text())
+        continue
+      }
+
+      const providerPayload = await response.json().catch(() => ({})) as { id?: string }
+      await options.db
+        .update(emailLogs)
+        .set({
+          status: 'sent',
+          attempts,
+          providerMessageId: providerPayload.id ?? null,
+          error: null,
+          lockedAt: null,
+          updatedAt: now,
+          sentAt: now,
+        })
+        .where(eq(emailLogs.id, delivery.id))
+      sent += 1
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown provider error'
+      await recordFailure(message)
+    }
   }
+
+  return { claimed: claimed.length, sent, failed }
+}
+
+interface StartEmailWorkerOptions {
+  db: PostgresJsDatabase<any>
+  apiKey?: string
+  from?: string
+  intervalMs?: number
+  onError?: (error: unknown) => void
+}
+
+export function startEmailOutboxWorker(options: StartEmailWorkerOptions) {
+  if (!options.apiKey) return () => undefined
+
+  let running = false
+  const tick = async () => {
+    if (running) return
+    running = true
+    try {
+      await processEmailOutboxBatch({
+        db: options.db,
+        apiKey: options.apiKey,
+        from: options.from,
+      })
+    } catch (error) {
+      options.onError?.(error)
+    } finally {
+      running = false
+    }
+  }
+
+  void tick()
+  const timer = setInterval(() => void tick(), options.intervalMs ?? 15_000)
+  timer.unref()
+  return () => clearInterval(timer)
 }
 
 function getSubject(template: EmailTemplate, data: Record<string, string>): string {
@@ -91,10 +213,23 @@ function getSubject(template: EmailTemplate, data: Record<string, string>): stri
     case 'tournament_reminder': return `⏰ ${data.tournamentName} empieza mañana`
     case 'results': return `🏆 Resultados — ${data.tournamentName}`
     case 'cancellation': return `❌ Inscripción cancelada — ${data.tournamentName}`
+    case 'announcement': return `📢 ${data.subject}`
   }
 }
 
+function escapeHtml(value: string | undefined): string {
+  return (value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;')
+}
+
 function renderTemplate(template: EmailTemplate, data: Record<string, string>): string {
+  const safe = Object.fromEntries(
+    Object.entries(data).map(([key, value]) => [key, escapeHtml(value)]),
+  ) as Record<string, string>
   const base = (body: string) => `<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
 <body style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#e2e8f0;background:#0f172a">
@@ -106,34 +241,30 @@ function renderTemplate(template: EmailTemplate, data: Record<string, string>): 
 
   switch (template) {
     case 'welcome':
-      return base(`<h2>¡Hola ${data.firstName}!</h2>
-        <p>Tu cuenta de <strong>${data.role === 'organizer' ? 'Organizador' : 'Jugador'}</strong> ha sido creada exitosamente.</p>
+      return base(`<h2>¡Hola ${safe.firstName}!</h2>
+        <p>Tu cuenta de <strong>${safe.role === 'organizer' ? 'Organizador' : 'Jugador'}</strong> ha sido creada exitosamente.</p>
         <p><a href="https://bolos.mogambo.xyz/login" style="color:#f59e0b">Inicia sesión aquí</a></p>`)
-
     case 'enrollment_confirmed':
       return base(`<h2>✅ Inscripción confirmada</h2>
-        <p>${data.firstName}, quedaste registrado en <strong>${data.tournamentName}</strong>.</p>
-        <p>📅 ${data.startDate} &mdash; 📍 ${data.league || 'Por confirmar'}</p>`)
-
+        <p>${safe.firstName}, quedaste registrado en <strong>${safe.tournamentName}</strong>.</p>
+        <p>📅 ${safe.startDate} &mdash; 📍 ${safe.league || 'Por confirmar'}</p>`)
     case 'waitlisted':
       return base(`<h2>⏳ Lista de espera</h2>
-        <p>${data.firstName}, <strong>${data.tournamentName}</strong> está lleno. Quedaste en lista de espera.</p>
+        <p>${safe.firstName}, <strong>${safe.tournamentName}</strong> está lleno. Quedaste en lista de espera.</p>
         <p>Te avisaremos si se libera un cupo.</p>`)
-
     case 'tournament_reminder':
-      return base(`<h2>⏰ ${data.tournamentName} empieza mañana</h2>
-        <p>¡Prepárate ${data.firstName}! El torneo arranca mañana a las ${data.startTime}.</p>`)
-
+      return base(`<h2>⏰ ${safe.tournamentName} empieza mañana</h2>
+        <p>¡Prepárate ${safe.firstName}! El torneo arranca mañana a las ${safe.startTime}.</p>`)
     case 'results':
       return base(`<h2>🏆 Resultados</h2>
-        <p>${data.firstName}, los resultados de <strong>${data.tournamentName}</strong> están disponibles.</p>
-        <p>Posición: <strong>${data.position || '—'}</strong> | Puntaje: <strong>${data.score || '—'}</strong></p>`)
-
+        <p>${safe.firstName}, los resultados de <strong>${safe.tournamentName}</strong> están disponibles.</p>
+        <p>Posición: <strong>${safe.position || '—'}</strong> | Puntaje: <strong>${safe.score || '—'}</strong></p>`)
     case 'cancellation':
       return base(`<h2>❌ Inscripción cancelada</h2>
-        <p>${data.firstName}, tu registro en <strong>${data.tournamentName}</strong> ha sido cancelado.</p>`)
-
-    default:
-      return base(`<p>${JSON.stringify(data)}</p>`)
+        <p>${safe.firstName}, tu registro en <strong>${safe.tournamentName}</strong> ha sido cancelado.</p>`)
+    case 'announcement':
+      return base(`<h2>📢 ${safe.subject}</h2>
+        <p>${(safe.body ?? '').replaceAll('\n', '<br>')}</p>
+        <p>Sobre el torneo: <strong>${safe.tournamentName}</strong></p>`)
   }
 }

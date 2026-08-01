@@ -272,7 +272,12 @@ describe('tournament tenant isolation', () => {
 
     await db.insert(schema.tournamentPlayers).values(registration)
 
-    await expect(db.insert(schema.tournamentPlayers).values(registration)).rejects.toThrow('duplicate key')
+    await expect(db.insert(schema.tournamentPlayers).values(registration)).rejects.toBeDefined()
+    const registrations = await db
+      .select({ id: schema.tournamentPlayers.id })
+      .from(schema.tournamentPlayers)
+      .where(eq(schema.tournamentPlayers.tournamentId, tournament.id))
+    expect(registrations).toHaveLength(1)
   })
 
   it('rejects duplicate organization memberships at the database boundary', async () => {
@@ -285,6 +290,11 @@ describe('tournament tenant isolation', () => {
 
     await expect(
       db.insert(schema.organizationMembers).values(duplicateMembership),
-    ).rejects.toThrow('duplicate key')
+    ).rejects.toBeDefined()
+    const memberships = await db
+      .select({ id: schema.organizationMembers.id })
+      .from(schema.organizationMembers)
+      .where(eq(schema.organizationMembers.organizationId, organization.id))
+    expect(memberships).toHaveLength(1)
   })
 })

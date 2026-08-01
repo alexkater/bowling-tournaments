@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken'
 import { router, procedure } from '../trpc'
 import { organizationMembers, organizations, profiles, userCredentials } from '@bowling/db'
 import { TRPCError } from '@trpc/server'
+import { queueEmail } from '../services/email'
 
 const SALT_ROUNDS = 10
 
@@ -91,19 +92,19 @@ export const authRouter = router({
           })
         }
 
+        await queueEmail({
+          db: tx,
+          profileId: createdProfile.id,
+          to: createdProfile.email,
+          idempotencyKey: `welcome:${createdProfile.id}`,
+          template: 'welcome',
+          data: { firstName: createdProfile.firstName, role: createdProfile.role },
+        })
+
         return createdProfile
       })
 
       const token = signToken(profile.id, jwtSecret)
-
-      // ── Welcome email (fire and forget) ──
-      import('../services/email').then(({ sendEmail }) => {
-        sendEmail({
-          db: ctx.db, profileId: profile.id, to: profile.email,
-          template: 'welcome',
-          data: { firstName: profile.firstName, role: profile.role },
-        }).catch(() => {})
-      }).catch(() => {})
 
       return {
         token,

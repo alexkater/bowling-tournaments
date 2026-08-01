@@ -8,7 +8,8 @@ import * as schema from '@bowling/db'
 import { appRouter } from '../routers'
 
 const queryClient = postgres(
-  process.env.DATABASE_URL ?? 'postgres://bowling:***@localhost:5432/bowling',
+  process.env.DATABASE_URL ?? 'postgres://bowling:bowling@localhost:5432/bowling',
+  { max: 1 },
 )
 const db = drizzle(queryClient, { schema })
 
@@ -95,6 +96,40 @@ async function seedTournament(
 // ─── Before each ───
 
 beforeEach(async () => {
+  await queryClient`DROP TABLE IF EXISTS pg_temp.notifications`
+  await queryClient`DROP TABLE IF EXISTS pg_temp.email_logs`
+  await queryClient`
+    CREATE TEMP TABLE notifications (
+      id text PRIMARY KEY,
+      "profileId" text NOT NULL,
+      type text NOT NULL,
+      title text NOT NULL,
+      body text NOT NULL,
+      metadata jsonb DEFAULT '{}'::jsonb,
+      read boolean NOT NULL DEFAULT false,
+      "createdAt" timestamptz NOT NULL DEFAULT now()
+    )
+  `
+  await queryClient`
+    CREATE TEMP TABLE email_logs (
+      id text PRIMARY KEY,
+      "idempotencyKey" text NOT NULL UNIQUE,
+      "profileId" text,
+      "to" text NOT NULL,
+      template text NOT NULL,
+      payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+      status text NOT NULL DEFAULT 'pending',
+      attempts integer NOT NULL DEFAULT 0,
+      "maxAttempts" integer NOT NULL DEFAULT 5,
+      "nextAttemptAt" timestamptz NOT NULL DEFAULT now(),
+      "lockedAt" timestamptz,
+      "providerMessageId" text,
+      error text,
+      "createdAt" timestamptz NOT NULL DEFAULT now(),
+      "updatedAt" timestamptz NOT NULL DEFAULT now(),
+      "sentAt" timestamptz
+    )
+  `
   await queryClient`TRUNCATE organizations CASCADE`
 })
 
@@ -157,6 +192,27 @@ describe('enrollment router — self-service registration', () => {
     await expect(c.enrollment.register({ tournamentId })).rejects.toMatchObject({ code: 'CONFLICT' })
   })
 
+  it('rolls back registration when communication persistence fails', async () => {
+    const pid = 'reg-player-rollback'
+    await seedProfile(pid)
+    await queryClient`
+      ALTER TABLE notifications
+      ADD CONSTRAINT reject_enrollment_notification
+      CHECK (type <> 'enrollment_confirmed')
+    `
+
+    await expect(caller({ userId: pid }).enrollment.register({ tournamentId })).rejects.toBeDefined()
+
+    const registrations = await db
+      .select()
+      .from(schema.tournamentPlayers)
+      .where(and(
+        eq(schema.tournamentPlayers.tournamentId, tournamentId),
+        eq(schema.tournamentPlayers.profileId, pid),
+      ))
+    expect(registrations).toHaveLength(0)
+  })
+
   it('waitlists a player when tournament is full', async () => {
     const tiny = await seedTournament(orgId, { maxPlayers: 1, allowWaitlist: true })
     const pid1 = 'reg-player-full-1'
@@ -210,6 +266,54 @@ describe('enrollment router — self-service registration', () => {
       .from(schema.tournamentPlayers)
       .where(eq(schema.tournamentPlayers.profileId, pidB))
     expect(bRow.status).toBe('confirmed')
+
+    const cancelledNotifications = await db
+      .select()
+      .from(schema.notifications)
+      .where(and(
+        eq(schema.notifications.profileId, pidA),
+        eq(schema.notifications.type, 'enrollment_cancelled'),
+      ))
+    const [cancellationEmail] = await db
+      .select()
+      .from(schema.emailLogs)
+      .where(and(
+        eq(schema.emailLogs.profileId, pidA),
+        eq(schema.emailLogs.template, 'cancellation'),
+      ))
+    const [promotionNotification] = await db
+      .select()
+      .from(schema.notifications)
+      .where(and(
+        eq(schema.notifications.profileId, pidB),
+        eq(schema.notifications.type, 'promoted'),
+      ))
+
+    expect(cancelledNotifications).toHaveLength(1)
+    expect(cancellationEmail?.status).toBe('pending')
+    expect(promotionNotification?.title).toContain(tiny.tournament.name)
+  })
+
+  it('rolls back cancellation when communication persistence fails', async () => {
+    const pid = 'cancel-player-rollback'
+    await seedProfile(pid)
+    await caller({ userId: pid }).enrollment.register({ tournamentId })
+    await queryClient`
+      ALTER TABLE email_logs
+      ADD CONSTRAINT reject_cancellation_email
+      CHECK (template <> 'cancellation')
+    `
+
+    await expect(caller({ userId: pid }).enrollment.cancel({ tournamentId })).rejects.toBeDefined()
+
+    const [registration] = await db
+      .select()
+      .from(schema.tournamentPlayers)
+      .where(and(
+        eq(schema.tournamentPlayers.tournamentId, tournamentId),
+        eq(schema.tournamentPlayers.profileId, pid),
+      ))
+    expect(registration?.status).toBe('confirmed')
   })
 
   it('prevents cancelling registration of another player', async () => {
