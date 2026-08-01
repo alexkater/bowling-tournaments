@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const [webDockerfile, deployServer] = await Promise.all([
+const [webDockerfile, deployServer, productionCompose, communicationsPlan] = await Promise.all([
   readFile(new URL('../Dockerfile.web', import.meta.url), 'utf8'),
   readFile(new URL('./deploy-server.sh', import.meta.url), 'utf8'),
+  readFile(new URL('../docker-compose.prod.yml', import.meta.url), 'utf8'),
+  readFile(new URL('../docs/comms-hardening-plan.md', import.meta.url), 'utf8'),
 ]);
 
 test('Next.js standalone listens on every container interface', () => {
@@ -21,4 +23,22 @@ test('production deploy waits for Docker health after HTTP checks', () => {
   assert.match(deployServer, /if \[\[ "\$status" == unhealthy \]\]/);
   assert.match(deployServer, /wait_for_service_health api/);
   assert.match(deployServer, /wait_for_service_health web/);
+});
+
+test('production deploy fails before building when free disk is below 3 GiB', () => {
+  assert.match(deployServer, /MIN_FREE_DISK_KB=3145728/);
+  assert.match(deployServer, /available_disk_kb < MIN_FREE_DISK_KB/);
+  const diskCheckCall = deployServer.lastIndexOf('\ncheck_free_disk\n');
+  assert.ok(diskCheckCall > 0, 'disk preflight must be called');
+  assert.ok(
+    diskCheckCall < deployServer.indexOf('Building production images'),
+    'disk preflight must run before image builds',
+  );
+});
+
+test('production email delivery requires an explicit verified sender', () => {
+  assert.match(productionCompose, /EMAIL_FROM: \$\{EMAIL_FROM:-\}/);
+  assert.match(communicationsPlan, /RESEND_API_KEY/);
+  assert.match(communicationsPlan, /EMAIL_FROM/);
+  assert.match(communicationsPlan, /verified/i);
 });

@@ -72,6 +72,10 @@ export async function processEmailOutboxBatch(options: ProcessEmailOutboxOptions
   if (!options.apiKey) {
     return { claimed: 0, sent: 0, failed: 0, reason: 'provider_unconfigured' as const }
   }
+  const from = options.from?.trim()
+  if (!from) {
+    return { claimed: 0, sent: 0, failed: 0, reason: 'sender_unconfigured' as const }
+  }
 
   const now = options.now ?? new Date()
   const nowIso = now.toISOString()
@@ -136,7 +140,7 @@ export async function processEmailOutboxBatch(options: ProcessEmailOutboxOptions
           'Idempotency-Key': delivery.idempotencyKey,
         },
         body: JSON.stringify({
-          from: options.from ?? 'Strike Manager <noreply@bolos.mogambo.xyz>',
+          from,
           to: delivery.to,
           subject: getSubject(delivery.template, delivery.payload),
           html: renderTemplate(delivery.template, delivery.payload),
@@ -181,6 +185,10 @@ interface StartEmailWorkerOptions {
 
 export function startEmailOutboxWorker(options: StartEmailWorkerOptions) {
   if (!options.apiKey) return () => undefined
+  if (!options.from?.trim()) {
+    options.onError?.(new Error('EMAIL_FROM is required when RESEND_API_KEY is configured'))
+    return () => undefined
+  }
 
   let running = false
   const tick = async () => {
@@ -264,7 +272,7 @@ function renderTemplate(template: EmailTemplate, data: Record<string, string>): 
         <p>${safe.firstName}, tu registro en <strong>${safe.tournamentName}</strong> ha sido cancelado.</p>`)
     case 'announcement':
       return base(`<h2>📢 ${safe.subject}</h2>
-        <p>${(safe.body ?? '').replaceAll('\n', '<br>')}</p>
+        <p>${(safe.body ?? '').replace(/\r?\n/g, '<br>')}</p>
         <p>Sobre el torneo: <strong>${safe.tournamentName}</strong></p>`)
   }
 }

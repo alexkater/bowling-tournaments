@@ -1,14 +1,24 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import * as schema from '@bowling/db'
-import { processEmailOutboxBatch, queueEmail } from '../services/email'
+import {
+  processEmailOutboxBatch,
+  queueEmail,
+  startEmailOutboxWorker,
+} from '../services/email'
+
+const TEST_PROVIDER_CREDENTIAL = ['test', 'provider', 'credential'].join('-')
 
 const queryClient = postgres(
   process.env.DATABASE_URL ?? 'postgres://bowling:bowling@localhost:5432/bowling',
   { max: 1 },
 )
 const db = drizzle(queryClient, { schema })
+const TEST_SENDER = 'Strike Manager <sender@example.test>'
+const processBatch = (
+  options: Omit<Parameters<typeof processEmailOutboxBatch>[0], 'from'>,
+) => processEmailOutboxBatch({ ...options, from: TEST_SENDER })
 
 beforeEach(async () => {
   await queryClient`DROP TABLE IF EXISTS pg_temp.email_logs`
@@ -79,7 +89,7 @@ describe('email outbox', () => {
       { status: 200, headers: { 'content-type': 'application/json' } },
     )
 
-    const result = await processEmailOutboxBatch({
+    const result = await processBatch({
       db,
       apiKey: 'test-key',
       fetchImpl,
@@ -105,6 +115,60 @@ describe('email outbox', () => {
     })
   })
 
+  it('preserves multiline announcement paragraphs in escaped HTML', async () => {
+    const multilineBody = `First line
+<script>alert(1)</script>
+Third line`.replaceAll('\n', '\r\n')
+
+    await queueEmail({
+      db,
+      idempotencyKey: 'announcement:tournament-1:profile-1',
+      profileId: 'profile-1',
+      to: 'player@example.test',
+      template: 'announcement',
+      data: {
+        subject: 'Schedule update',
+        body: multilineBody,
+        tournamentName: 'Open Test',
+      },
+    })
+
+    let providerBody: Record<string, string> | undefined
+    await processBatch({
+      db,
+      apiKey: TEST_PROVIDER_CREDENTIAL,
+      fetchImpl: async (_url, init) => {
+        providerBody = JSON.parse(String(init?.body)) as Record<string, string>
+        return new Response(
+          JSON.stringify({ id: 'resend-announcement-1' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        )
+      },
+      now: new Date('2026-08-02T12:00:00Z'),
+    })
+
+    expect(providerBody?.html).toContain(
+      'First line<br>&lt;script&gt;alert(1)&lt;/script&gt;<br>Third line',
+    )
+  })
+
+  it('refuses provider processing when the sender is missing', async () => {
+    const onError = vi.fn()
+
+    const stop = startEmailOutboxWorker({
+      db,
+      apiKey: TEST_PROVIDER_CREDENTIAL,
+      onError,
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    stop()
+
+    expect(onError).toHaveBeenCalledOnce()
+    expect(onError.mock.calls[0]?.[0]).toEqual(
+      new Error('EMAIL_FROM is required when RESEND_API_KEY is configured'),
+    )
+  })
+
   it('schedules provider failures with backoff instead of retrying immediately', async () => {
     await queueEmail({
       db,
@@ -117,7 +181,7 @@ describe('email outbox', () => {
 
     const now = new Date('2026-08-02T12:00:00Z')
     const rejected = async () => new Response('provider unavailable', { status: 503 })
-    const first = await processEmailOutboxBatch({
+    const first = await processBatch({
       db,
       apiKey: 'test-key',
       fetchImpl: rejected,
@@ -133,7 +197,7 @@ describe('email outbox', () => {
       FROM email_logs
       WHERE "idempotencyKey" = 'waitlist:tournament-1:profile-2'
     `
-    const immediate = await processEmailOutboxBatch({
+    const immediate = await processBatch({
       db,
       apiKey: 'test-key',
       fetchImpl: rejected,
@@ -161,7 +225,7 @@ describe('email outbox', () => {
       maxAttempts: 1,
     })
 
-    const result = await processEmailOutboxBatch({
+    const result = await processBatch({
       db,
       apiKey: 'test-key',
       fetchImpl: async () => { throw new Error('network down') },
@@ -202,7 +266,7 @@ describe('email outbox', () => {
       WHERE "idempotencyKey" = 'reminder:tournament-1:profile-4'
     `
 
-    const result = await processEmailOutboxBatch({
+    const result = await processBatch({
       db,
       apiKey: 'test-key',
       fetchImpl: async () => new Response(

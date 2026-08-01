@@ -7,6 +7,7 @@ readonly DEPLOY_DIR="/opt/bowling-tournaments"
 readonly BACKUP_DIR="/opt/backups/bowling-tournaments"
 readonly API_PORT="3001"
 readonly WEB_PORT="3103"
+readonly MIN_FREE_DISK_KB=3145728
 COMPOSE=(docker compose --env-file "$DEPLOY_DIR/.env" -f "$DEPLOY_DIR/docker-compose.prod.yml")
 LOCK_FILE="/var/lock/bowling-tournaments-deploy.lock"
 DEPLOY_STARTED=false
@@ -38,6 +39,23 @@ fail() {
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "Required command not found: $1"
+}
+
+check_free_disk() {
+  local available_disk_kb=""
+  local filesystem blocks used available capacity mounted_on
+
+  while read -r filesystem blocks used available capacity mounted_on; do
+    if [[ "$available" =~ ^[0-9]+$ ]]; then
+      available_disk_kb="$available"
+    fi
+  done < <(df -Pk "$DEPLOY_DIR")
+
+  [[ -n "$available_disk_kb" ]] || fail "Could not determine free disk space"
+  log "Checking free disk: ${available_disk_kb} KiB available"
+  if ((available_disk_kb < MIN_FREE_DISK_KB)); then
+    fail "At least 3 GiB of free disk is required before building production images"
+  fi
 }
 
 assert_port_available_or_owned() {
@@ -149,7 +167,7 @@ exec 9>"$LOCK_FILE"
 flock -n 9 || fail "Another bowling deployment is already running"
 trap rollback_images ERR
 
-for command_name in docker node curl gzip nginx systemctl flock; do
+for command_name in docker node curl gzip nginx systemctl flock df; do
   require_command "$command_name"
 done
 
@@ -158,6 +176,7 @@ cd "$DEPLOY_DIR"
 
 assert_port_available_or_owned "$API_PORT" api
 assert_port_available_or_owned "$WEB_PORT" web
+check_free_disk
 
 log "Configuring non-secret production routing"
 node scripts/configure-production-env.mjs \
