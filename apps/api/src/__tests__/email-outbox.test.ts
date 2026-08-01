@@ -116,6 +116,10 @@ describe('email outbox', () => {
   })
 
   it('preserves multiline announcement paragraphs in escaped HTML', async () => {
+    const multilineBody = `First line
+<script>alert(1)</script>
+Third line`.replaceAll('\n', '\r\n')
+
     await queueEmail({
       db,
       idempotencyKey: 'announcement:tournament-1:profile-1',
@@ -124,7 +128,7 @@ describe('email outbox', () => {
       template: 'announcement',
       data: {
         subject: 'Schedule update',
-        body: 'First line\n<script>alert(1)</script>\nThird line',
+        body: multilineBody,
         tournamentName: 'Open Test',
       },
     })

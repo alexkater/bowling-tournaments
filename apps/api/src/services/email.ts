@@ -272,7 +272,7 @@ function renderTemplate(template: EmailTemplate, data: Record<string, string>): 
         <p>${safe.firstName}, tu registro en <strong>${safe.tournamentName}</strong> ha sido cancelado.</p>`)
     case 'announcement':
       return base(`<h2>📢 ${safe.subject}</h2>
-        <p>${(safe.body ?? '').replaceAll('\n', '<br>')}</p>
+        <p>${(safe.body ?? '').replace(/\r?\n/g, '<br>')}</p>
         <p>Sobre el torneo: <strong>${safe.tournamentName}</strong></p>`)
   }
 }
