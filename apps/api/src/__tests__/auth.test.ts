@@ -29,10 +29,9 @@ function caller(userId?: string) {
 // ─── Cleanup before each test ─────────────────────────────────────
 
 beforeEach(async () => {
-  // Delete in reverse dependency order; ignore permission errors on new tables
-  for (const tbl of ['email_logs', 'notifications']) {
-    try { await queryClient.unsafe(`DELETE FROM ${tbl}`) } catch {}
-  }
+  // Delete in reverse dependency order.
+  await queryClient`DELETE FROM email_logs`
+  await queryClient`DELETE FROM notifications`
   await queryClient`DELETE FROM tournament_players`
   await queryClient`DELETE FROM organization_members`
   await queryClient`DELETE FROM user_credentials`
@@ -104,6 +103,17 @@ describe('auth router', () => {
       profileRole: 'organizer',
       membershipRole: 'owner',
       organizationName: 'Test User Organization',
+    })
+
+    const [welcomeEmail] = await db
+      .select()
+      .from(allSchema.emailLogs)
+      .where(eq(allSchema.emailLogs.idempotencyKey, `welcome:${result.profile.id}`))
+    expect(welcomeEmail).toMatchObject({
+      profileId: result.profile.id,
+      to: newUser.email,
+      template: 'welcome',
+      status: 'pending',
     })
   })
 

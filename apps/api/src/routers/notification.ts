@@ -1,11 +1,83 @@
-import { eq, desc, sql } from 'drizzle-orm'
+import { and, eq, desc, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { router, procedure } from '../trpc'
-import { notifications } from '@bowling/db'
+import { notifications, profiles, tournamentPlayers, tournaments } from '@bowling/db'
 import { TRPCError } from '@trpc/server'
-import { requireAuth } from '../middleware/auth'
+import { requireAuth, requireOrgAccess, requireOrgRole } from '../middleware/auth'
+import { createNotification } from '../services/notifications'
+import { queueEmail } from '../services/email'
 
 export const notificationRouter = router({
+  broadcast: procedure
+    .use(requireOrgAccess)
+    .use(requireOrgRole(['owner', 'admin']))
+    .input(z.object({
+      tournamentId: z.string().uuid(),
+      clientMutationId: z.string().uuid(),
+      subject: z.string().trim().min(3).max(120),
+      body: z.string().trim().min(1).max(2000),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      return ctx.db.transaction(async (tx) => {
+        const [tournament] = await tx
+          .select({ id: tournaments.id, name: tournaments.name })
+          .from(tournaments)
+          .where(and(
+            eq(tournaments.id, input.tournamentId),
+            eq(tournaments.organizationId, ctx.orgId),
+          ))
+          .limit(1)
+
+        if (!tournament) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Tournament not found' })
+        }
+
+        const recipients = await tx
+          .select({
+            profileId: profiles.id,
+            email: profiles.email,
+            firstName: profiles.firstName,
+          })
+          .from(tournamentPlayers)
+          .innerJoin(profiles, eq(tournamentPlayers.profileId, profiles.id))
+          .where(and(
+            eq(tournamentPlayers.tournamentId, tournament.id),
+            inArray(tournamentPlayers.status, ['confirmed', 'waitlisted']),
+          ))
+
+        for (const recipient of recipients) {
+          await createNotification({
+            db: tx,
+            id: `announcement:${input.clientMutationId}:${recipient.profileId}`,
+            profileId: recipient.profileId,
+            type: 'announcement',
+            title: input.subject,
+            body: input.body,
+            metadata: {
+              tournamentId: tournament.id,
+              clientMutationId: input.clientMutationId,
+              createdBy: ctx.userId,
+            },
+          })
+          await queueEmail({
+            db: tx,
+            idempotencyKey: `announcement:${input.clientMutationId}:${recipient.profileId}`,
+            profileId: recipient.profileId,
+            to: recipient.email,
+            template: 'announcement',
+            data: {
+              firstName: recipient.firstName,
+              tournamentName: tournament.name,
+              subject: input.subject,
+              body: input.body,
+            },
+          })
+        }
+
+        return { recipients: recipients.length }
+      })
+    }),
+
   list: procedure
     .use(requireAuth)
     .input(z.object({
@@ -19,7 +91,7 @@ export const notificationRouter = router({
       const items = await ctx.db
         .select()
         .from(notifications)
-        .where(sql`${conditions.join(' AND ')}`)
+        .where(and(...conditions))
         .orderBy(desc(notifications.createdAt))
         .limit(input.limit)
 

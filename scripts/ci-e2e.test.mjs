@@ -16,4 +16,9 @@ test('CI runs Playwright E2E with PostgreSQL and Chromium', async () => {
     /playwright test e2e\/player-onboarding\.spec\.ts/,
     'E2E must execute the critical player onboarding journey',
   )
+  assert.match(
+    workflow,
+    /player-onboarding\.spec\.ts e2e\/organizer-announcement\.spec\.ts/,
+    'E2E must execute the organizer announcement journey',
+  )
 })

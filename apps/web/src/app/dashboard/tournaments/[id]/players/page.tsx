@@ -14,6 +14,9 @@ import {
   Plus,
   Search,
   Loader2,
+  MessageSquare,
+  Send,
+  CheckCircle2,
   X,
 } from 'lucide-react'
 
@@ -86,6 +89,7 @@ export default function PlayersPage() {
   const squads = (squadsData ?? []) as unknown as SquadRow[]
 
   const [showRegisterModal, setShowRegisterModal] = useState(false)
+  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false)
 
   if (isLoading) {
     return (
@@ -116,15 +120,24 @@ export default function PlayersPage() {
             {tournament.name} &middot; {new Date(tournament.startDate).toLocaleDateString()}
           </p>
         </div>
-        <button
-          onClick={() => setShowRegisterModal(true)}
-          disabled={squads.length === 0}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
-          title={squads.length === 0 ? 'Create a squad before registering players' : undefined}
-        >
-          <UserPlus className="h-4 w-4" />
-          Register Player
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAnnouncementModal(true)}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <MessageSquare className="h-4 w-4" />
+            Send announcement
+          </button>
+          <button
+            onClick={() => setShowRegisterModal(true)}
+            disabled={squads.length === 0}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+            title={squads.length === 0 ? 'Create a squad before registering players' : undefined}
+          >
+            <UserPlus className="h-4 w-4" />
+            Register Player
+          </button>
+        </div>
       </div>
 
       {/* Tournament info cards */}
@@ -183,6 +196,127 @@ export default function PlayersPage() {
           onClose={() => setShowRegisterModal(false)}
         />
       )}
+
+      {showAnnouncementModal && (
+        <AnnouncementModal
+          tournamentId={tournamentId}
+          tournamentName={tournament.name}
+          onClose={() => setShowAnnouncementModal(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+function AnnouncementModal({
+  tournamentId,
+  tournamentName,
+  onClose,
+}: {
+  tournamentId: string
+  tournamentName: string
+  onClose: () => void
+}) {
+  const [subject, setSubject] = useState('')
+  const [body, setBody] = useState('')
+  const [clientMutationId] = useState(() => crypto.randomUUID())
+  const [recipients, setRecipients] = useState<number | null>(null)
+
+  const broadcastMutation = trpc.notification.broadcast.useMutation({
+    onSuccess: (result) => setRecipients(result.recipients),
+  })
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault()
+    if (subject.trim().length < 3 || !body.trim()) return
+    broadcastMutation.mutate({
+      tournamentId,
+      clientMutationId,
+      subject: subject.trim(),
+      body: body.trim(),
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="dialog" aria-modal="true" aria-labelledby="announcement-title">
+      <div className="mx-4 w-full max-w-lg rounded-xl bg-white shadow-xl">
+        {recipients !== null ? (
+          <div className="p-8 text-center" data-testid="announcement-success">
+            <CheckCircle2 className="mx-auto h-12 w-12 text-green-600" />
+            <h3 id="announcement-title" className="mt-4 text-lg font-semibold text-gray-900">Announcement queued</h3>
+            <p className="mt-2 text-sm text-gray-600">
+              Notification queued for {recipients} registered {recipients === 1 ? 'player' : 'players'}.
+            </p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-6 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              Close
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={submit}>
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <div>
+                <h3 id="announcement-title" className="text-lg font-semibold text-gray-900">Send announcement</h3>
+                <p className="mt-0.5 text-xs text-gray-500">{tournamentName}</p>
+              </div>
+              <button type="button" onClick={onClose} aria-label="Close announcement" className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 px-6 py-5">
+              <div>
+                <label htmlFor="announcement-subject" className="block text-sm font-medium text-gray-700">Subject</label>
+                <input
+                  id="announcement-subject"
+                  value={subject}
+                  onChange={(event) => setSubject(event.target.value)}
+                  maxLength={120}
+                  required
+                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                <p className="mt-1 text-right text-xs text-gray-400">{subject.length}/120</p>
+              </div>
+              <div>
+                <label htmlFor="announcement-body" className="block text-sm font-medium text-gray-700">Message</label>
+                <textarea
+                  id="announcement-body"
+                  value={body}
+                  onChange={(event) => setBody(event.target.value)}
+                  maxLength={2000}
+                  rows={6}
+                  required
+                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                <p className="mt-1 text-right text-xs text-gray-400">{body.length}/2000</p>
+              </div>
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                This will create an in-app notification and queue an email for every confirmed and waitlisted player.
+              </p>
+              {broadcastMutation.error && (
+                <p role="alert" className="text-sm text-red-600">{broadcastMutation.error.message}</p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-4">
+              <button type="button" onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={broadcastMutation.isPending || subject.trim().length < 3 || !body.trim()}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {broadcastMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                Confirm and queue
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
     </div>
   )
 }
