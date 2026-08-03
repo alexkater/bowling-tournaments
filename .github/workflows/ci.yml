@@ -91,6 +91,7 @@ jobs:
       DATABASE_URL: postgres://bowling:bowling@localhost:5432/bowling
       JWT_SECRET: ci-only-player-e2e-secret
       NEXT_PUBLIC_API_URL: http://localhost:3001/trpc
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

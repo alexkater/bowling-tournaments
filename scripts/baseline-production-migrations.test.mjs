@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 
@@ -10,6 +11,11 @@ import {
 } from '../packages/db/scripts/baseline-production-migrations.mjs';
 
 const migrationsDir = path.resolve('packages/db/migrations');
+
+test('new credentials are not verified by a database default', async () => {
+  const schema = await readFile('packages/db/src/schema/user_credentials.ts', 'utf8');
+  assert.doesNotMatch(schema, /emailVerifiedAt:.*defaultNow\(\)/);
+});
 
 test('migration plan contains every journal entry with a stable hash', async () => {
   const plan = await loadMigrationPlan(migrationsDir);
@@ -25,6 +31,7 @@ test('migration plan contains every journal entry with a stable hash', async () 
       '0005_easy_slapstick',
       '0006_little_molecule_man',
       '0007_flashy_scarlet_witch',
+      '0008_drop-email-verification-default',
     ],
   );
   assert.ok(plan.every((migration) => /^[a-f0-9]{64}$/.test(migration.hash)));

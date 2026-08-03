@@ -10,6 +10,7 @@ Make public account onboarding recoverable and abuse-resistant without breaking 
 - New users cannot receive an authenticated session until their email is verified.
 - Verification and reset tokens are 256-bit random values; only SHA-256 hashes are stored in `auth_tokens`.
 - Raw action links are encrypted with AES-256-GCM before entering the durable outbox. The encryption key is derived from the existing JWT secret with domain separation.
+- New action links carry tokens in the URL fragment (`#token=...`), which browsers do not send to Nginx; the UI still accepts legacy query links already sent before this hardening.
 - Tokens are single-use, expire, and are consumed atomically with the credential change.
 - Password reset increments `authVersion`, immediately invalidating older JWTs.
 - Forgot-password, resend-verification, and duplicate-signup responses do not reveal whether an account exists.
@@ -19,12 +20,14 @@ Make public account onboarding recoverable and abuse-resistant without breaking 
 
 ## Schema and migration
 
-Add migration `0007`:
+Migration `0007` introduced account security:
 
-- `user_credentials.emailVerifiedAt timestamptz NULL DEFAULT now()`, backfilled for all existing credentials. The default keeps inserts from the old API verified during a rolling deploy; the new API explicitly writes `NULL` for new signups.
+- `user_credentials.emailVerifiedAt timestamptz NULL DEFAULT now()`, backfilled for all existing credentials. The temporary default kept inserts from the old API verified during the rolling deploy; the new API explicitly wrote `NULL` for new signups.
 - `user_credentials.authVersion integer NOT NULL DEFAULT 0`.
 - `auth_tokens`: profile FK, token hash, type, expiry, used timestamp, audit timestamps and indexes.
 - `auth_rate_limits`: opaque HMAC key, action, atomic counter and window expiry.
+
+Migration `0008` removes the temporary `emailVerifiedAt DEFAULT now()` after the secured API rollout. New credential inserts now fail closed as unverified unless a trusted flow explicitly supplies a verification timestamp.
 
 ## API contract
 

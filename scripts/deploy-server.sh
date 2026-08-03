@@ -58,6 +58,25 @@ check_free_disk() {
   fi
 }
 
+validate_public_app_url() {
+  local key value configured=""
+
+  while IFS='=' read -r key value; do
+    if [[ "$key" == NEXT_PUBLIC_APP_URL ]]; then
+      configured="${value%$'\r'}"
+      break
+    fi
+  done < "$DEPLOY_DIR/.env"
+
+  configured="${configured#\"}"
+  configured="${configured%\"}"
+  configured="${configured#\'}"
+  configured="${configured%\'}"
+  [[ "$configured" == "https://$DOMAIN" ]] \
+    || fail "NEXT_PUBLIC_APP_URL must be the canonical https://$DOMAIN URL"
+  log "Canonical application URL is configured"
+}
+
 assert_port_available_or_owned() {
   local port="$1"
   local expected_service="$2"
@@ -184,6 +203,7 @@ node scripts/configure-production-env.mjs \
   --domain "$DOMAIN" \
   --api-port "$API_PORT" \
   --web-port "$WEB_PORT"
+validate_public_app_url
 "${COMPOSE[@]}" config --quiet
 
 mkdir -p "$BACKUP_DIR"

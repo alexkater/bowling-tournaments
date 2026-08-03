@@ -38,7 +38,9 @@ test.describe('Organizer announcements', () => {
 
     await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible()
     const organizerVerificationUrl = new URL(await latestActionUrl(organizerEmail, 'verify_email'))
-    await page.goto(`${organizerVerificationUrl.pathname}${organizerVerificationUrl.search}`)
+    expect(organizerVerificationUrl.search).toBe('')
+    expect(organizerVerificationUrl.hash).toMatch(/^#token=/)
+    await page.goto(`${organizerVerificationUrl.pathname}${organizerVerificationUrl.search}${organizerVerificationUrl.hash}`)
     await expect(page.getByRole('heading', { name: 'Email verified' })).toBeVisible()
     await page.getByRole('link', { name: 'Sign in' }).click()
     await page.getByLabel('Email address').fill(organizerEmail)

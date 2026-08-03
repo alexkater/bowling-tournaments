@@ -1,0 +1,1 @@
+ALTER TABLE "user_credentials" ALTER COLUMN "emailVerifiedAt" DROP DEFAULT;

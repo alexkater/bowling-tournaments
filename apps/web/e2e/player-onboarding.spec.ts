@@ -29,7 +29,9 @@ test.describe('Player onboarding', () => {
     await expect(page.getByRole('button', { name: 'Verification email queued' })).toBeVisible()
 
     const verificationUrl = new URL(await latestActionUrl(email, 'verify_email'))
-    await page.goto(`${verificationUrl.pathname}${verificationUrl.search}`)
+    expect(verificationUrl.search).toBe('')
+    expect(verificationUrl.hash).toMatch(/^#token=/)
+    await page.goto(`${verificationUrl.pathname}${verificationUrl.search}${verificationUrl.hash}`)
     await expect(page.getByRole('heading', { name: 'Email verified' })).toBeVisible()
     await page.getByRole('link', { name: 'Sign in' }).click()
 

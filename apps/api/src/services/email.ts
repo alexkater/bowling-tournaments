@@ -3,6 +3,7 @@ import { eq, sql } from 'drizzle-orm'
 import { emailLogs } from '@bowling/db'
 import crypto from 'crypto'
 import { decryptActionUrl } from './account-security'
+import { getPublicAppUrl } from './public-app-url'
 
 export type EmailTemplate =
   | 'welcome'
@@ -267,7 +268,7 @@ function renderTemplate(
     case 'welcome':
       return base(`<h2>¡Hola ${safe.firstName}!</h2>
         <p>Tu cuenta de <strong>${safe.role === 'organizer' ? 'Organizador' : 'Jugador'}</strong> ha sido creada exitosamente.</p>
-        <p><a href="https://bolos.mogambo.xyz/login" style="color:#f59e0b">Inicia sesión aquí</a></p>`)
+        <p><a href="${escapeHtml(`${getPublicAppUrl()}/login`)}" style="color:#f59e0b">Inicia sesión aquí</a></p>`)
     case 'enrollment_confirmed':
       return base(`<h2>✅ Inscripción confirmada</h2>
         <p>${safe.firstName}, quedaste registrado en <strong>${safe.tournamentName}</strong>.</p>

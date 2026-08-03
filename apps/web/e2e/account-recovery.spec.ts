@@ -16,8 +16,11 @@ test.describe('Account recovery', () => {
     await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible()
 
     const verificationUrl = new URL(await latestActionUrl(email, 'verify_email'))
-    await page.goto(`${verificationUrl.pathname}${verificationUrl.search}`)
+    expect(verificationUrl.search).toBe('')
+    expect(verificationUrl.hash).toMatch(/^#token=/)
+    await page.goto(`${verificationUrl.pathname}${verificationUrl.search}${verificationUrl.hash}`)
     await expect(page.getByRole('heading', { name: 'Email verified' })).toBeVisible()
+    await expect(page).toHaveURL(/\/verify-email$/)
 
     await page.goto('/forgot-password')
     await page.getByLabel('Email address').fill(email)
@@ -25,7 +28,10 @@ test.describe('Account recovery', () => {
     await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible()
 
     const resetUrl = new URL(await latestActionUrl(email, 'password_reset'))
-    await page.goto(`${resetUrl.pathname}${resetUrl.search}`)
+    expect(resetUrl.search).toBe('')
+    expect(resetUrl.hash).toMatch(/^#token=/)
+    await page.goto(`${resetUrl.pathname}${resetUrl.search}${resetUrl.hash}`)
+    await expect(page).toHaveURL(/\/reset-password$/)
     await page.getByLabel('New password').fill(newPassword)
     await page.getByLabel('Confirm password').fill(newPassword)
     await page.getByRole('button', { name: 'Update password' }).click()
