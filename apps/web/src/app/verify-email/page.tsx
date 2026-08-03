@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useRef } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
@@ -9,9 +9,25 @@ import { trpc } from '@/lib/trpc-provider'
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams()
-  const token = searchParams.get('token')
+  const searchToken = searchParams.get('token')
+  const [token, setToken] = useState<string | null>(null)
+  const [tokenResolved, setTokenResolved] = useState(false)
   const started = useRef(false)
   const verification = trpc.auth.verifyEmail.useMutation()
+
+  useEffect(() => {
+    const currentUrl = new URL(window.location.href)
+    const fragmentToken = new URLSearchParams(currentUrl.hash.slice(1)).get('token')
+    const resolvedToken = fragmentToken ?? searchToken
+    setToken(resolvedToken)
+    setTokenResolved(true)
+
+    if (resolvedToken) {
+      currentUrl.hash = ''
+      currentUrl.searchParams.delete('token')
+      window.history.replaceState(window.history.state, '', `${currentUrl.pathname}${currentUrl.search}`)
+    }
+  }, [searchToken])
 
   useEffect(() => {
     if (token && !started.current) {
@@ -22,7 +38,12 @@ function VerifyEmailContent() {
 
   return (
     <AuthShell>
-      {!token || verification.isError ? (
+      {!tokenResolved ? (
+        <>
+          <Loader2 className="mx-auto h-12 w-12 animate-spin text-pin-300" />
+          <h1 className="mt-4 text-2xl font-bold text-white">Reading secure link</h1>
+        </>
+      ) : !token || verification.isError ? (
         <>
           <AlertCircle className="mx-auto h-12 w-12 text-pin-300" />
           <h1 className="mt-4 text-2xl font-bold text-white">Verification link unavailable</h1>

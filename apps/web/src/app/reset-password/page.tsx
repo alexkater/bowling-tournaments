@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
@@ -8,11 +8,25 @@ import { LogoMark } from '@/components/Logo'
 import { trpc } from '@/lib/trpc-provider'
 
 function ResetPasswordContent() {
-  const token = useSearchParams().get('token')
+  const searchToken = useSearchParams().get('token')
+  const [token, setToken] = useState<string | null>(searchToken)
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const [validationError, setValidationError] = useState<string | null>(null)
   const reset = trpc.auth.resetPassword.useMutation()
+
+  useEffect(() => {
+    const currentUrl = new URL(window.location.href)
+    const fragmentToken = new URLSearchParams(currentUrl.hash.slice(1)).get('token')
+    const resolvedToken = fragmentToken ?? searchToken
+    setToken(resolvedToken)
+
+    if (resolvedToken) {
+      currentUrl.hash = ''
+      currentUrl.searchParams.delete('token')
+      window.history.replaceState(window.history.state, '', `${currentUrl.pathname}${currentUrl.search}`)
+    }
+  }, [searchToken])
 
   function submit(event: React.FormEvent) {
     event.preventDefault()

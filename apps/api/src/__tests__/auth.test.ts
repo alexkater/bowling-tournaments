@@ -28,6 +28,12 @@ function caller(userId?: string, ip = '198.51.100.25') {
   })
 }
 
+function actionToken(actionUrl: string): string | null {
+  const url = new URL(actionUrl)
+  return new URLSearchParams(url.hash.slice(1)).get('token')
+    ?? url.searchParams.get('token')
+}
+
 async function signupVerifyAndLogin(input: {
   email: string
   password: string
@@ -47,7 +53,7 @@ async function signupVerifyAndLogin(input: {
     verificationEmail.payload.actionUrlEncrypted,
     process.env.JWT_SECRET!,
   )
-  await c.auth.verifyEmail({ token: new URL(actionUrl).searchParams.get('token')! })
+  await c.auth.verifyEmail({ token: actionToken(actionUrl)! })
   return c.auth.login({ email: normalizedEmail, password: input.password })
 }
 
@@ -154,7 +160,10 @@ describe('auth router', () => {
         email.payload.actionUrlEncrypted,
         process.env.JWT_SECRET!,
       )
-      expect(actionUrl).toMatch(/^https:\/\/staging\.example\.test\/base\/verify-email\?token=/)
+      const url = new URL(actionUrl)
+      expect(url.pathname).toBe('/base/verify-email')
+      expect(url.search).toBe('')
+      expect(url.hash).toMatch(/^#token=/)
     } finally {
       if (previousAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL
       else process.env.NEXT_PUBLIC_APP_URL = previousAppUrl
@@ -174,7 +183,7 @@ describe('auth router', () => {
       verificationEmail.payload.actionUrlEncrypted,
       process.env.JWT_SECRET!,
     )
-    const token = new URL(actionUrl).searchParams.get('token')
+    const token = actionToken(actionUrl)
     expect(token).toBeTruthy()
 
     await expect(caller().auth.verifyEmail({ token: token! })).resolves.toEqual({ verified: true })
@@ -308,7 +317,7 @@ describe('auth router', () => {
       verificationEmails.at(-1)!.payload.actionUrlEncrypted,
       process.env.JWT_SECRET!,
     )
-    await caller().auth.verifyEmail({ token: new URL(latestUrl).searchParams.get('token')! })
+    await caller().auth.verifyEmail({ token: actionToken(latestUrl)! })
     await expect(caller().auth.signup({
       ...newUser,
       email: 'duplicate@example.com',
@@ -524,7 +533,7 @@ describe('auth router', () => {
       process.env.JWT_SECRET!,
     )
     await caller().auth.verifyEmail({
-      token: new URL(verificationUrl).searchParams.get('token')!,
+      token: actionToken(verificationUrl)!,
     })
     const login = await caller().auth.login({
       email: 'versioned@example.com',
@@ -559,7 +568,7 @@ describe('auth router', () => {
       process.env.JWT_SECRET!,
     )
     await caller().auth.verifyEmail({
-      token: new URL(verificationUrl).searchParams.get('token')!,
+      token: actionToken(verificationUrl)!,
     })
     const oldLogin = await caller().auth.login({
       email: 'recover@example.com',
@@ -574,7 +583,7 @@ describe('auth router', () => {
       SELECT payload FROM email_logs WHERE template = 'password_reset' AND "to" = 'recover@example.com'
     `
     const resetUrl = decryptActionUrl(resetEmail.payload.actionUrlEncrypted, process.env.JWT_SECRET!)
-    const resetToken = new URL(resetUrl).searchParams.get('token')!
+    const resetToken = actionToken(resetUrl)!
     const newPassword = 'a-new-secure-password'
 
     await expect(caller().auth.resetPassword({

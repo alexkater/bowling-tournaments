@@ -33,6 +33,7 @@ RUN pnpm --filter @bowling/api build
 
 FROM base AS runner
 
+# NEXT_PUBLIC_APP_URL is a runtime-only API setting injected by docker-compose.prod.yml.
 ENV NODE_ENV=production
 
 COPY --from=builder /app/package.json \

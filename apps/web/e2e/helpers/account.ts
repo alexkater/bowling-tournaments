@@ -38,7 +38,9 @@ export async function latestActionUrl(
 }
 
 export function actionToken(actionUrl: string): string {
-  const token = new URL(actionUrl).searchParams.get('token')
+  const url = new URL(actionUrl)
+  const token = new URLSearchParams(url.hash.slice(1)).get('token')
+    ?? url.searchParams.get('token')
   if (!token) throw new Error('Action URL is missing token')
   return token
 }

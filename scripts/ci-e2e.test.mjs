@@ -10,6 +10,11 @@ test('CI runs Playwright E2E with PostgreSQL and Chromium', async () => {
   assert.match(workflow, /^  e2e:\s*$/m, 'CI must define an e2e job')
   assert.match(workflow, /image:\s*postgres:16-alpine/, 'E2E must use an isolated PostgreSQL service')
   assert.match(workflow, /drizzle-kit push/, 'E2E must provision the database schema')
+  assert.match(
+    workflow,
+    /NEXT_PUBLIC_APP_URL:\s*http:\/\/localhost:3000/,
+    'E2E must build account links for the local web server',
+  )
   assert.match(workflow, /playwright install --with-deps chromium/, 'E2E must install Chromium and OS dependencies')
   assert.match(
     workflow,

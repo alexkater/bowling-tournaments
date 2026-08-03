@@ -2,13 +2,15 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const [webDockerfile, deployServer, productionCompose, communicationsPlan, apiServer, envExample] = await Promise.all([
+const [webDockerfile, deployServer, productionCompose, communicationsPlan, apiServer, envExample, emailService, publicAppUrl] = await Promise.all([
   readFile(new URL('../Dockerfile.web', import.meta.url), 'utf8'),
   readFile(new URL('./deploy-server.sh', import.meta.url), 'utf8'),
   readFile(new URL('../docker-compose.prod.yml', import.meta.url), 'utf8'),
   readFile(new URL('../docs/comms-hardening-plan.md', import.meta.url), 'utf8'),
   readFile(new URL('../apps/api/src/server.ts', import.meta.url), 'utf8'),
   readFile(new URL('../.env.example', import.meta.url), 'utf8'),
+  readFile(new URL('../apps/api/src/services/email.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../apps/api/src/services/public-app-url.ts', import.meta.url), 'utf8'),
 ]);
 
 test('Next.js standalone listens on every container interface', () => {
@@ -51,9 +53,24 @@ test('production API receives the canonical app URL for account action links', (
   const apiService = productionCompose.split('\n  api:\n', 2)[1]?.split('\n  web:\n', 1)[0];
   assert.ok(apiService, 'api service is required');
   assert.match(apiService, /NEXT_PUBLIC_APP_URL: \$\{NEXT_PUBLIC_APP_URL:\?NEXT_PUBLIC_APP_URL is required\}/);
+  assert.match(deployServer, /validate_public_app_url\(\)/);
+  const validationCall = deployServer.lastIndexOf('\nvalidate_public_app_url\n');
+  assert.ok(validationCall > 0, 'canonical app URL preflight must be called');
+  assert.ok(
+    validationCall < deployServer.indexOf('Backing up PostgreSQL'),
+    'canonical app URL must be validated before backup and image builds',
+  );
 });
 
 test('API trusts one proxy hop and supplies the action-link secret to the email worker', () => {
   assert.match(apiServer, /Fastify\(\{ logger: true, trustProxy: 1 \}\)/);
   assert.match(apiServer, /actionLinkSecret: process\.env\.JWT_SECRET/);
+});
+
+test('welcome email uses the validated runtime canonical application URL', () => {
+  assert.doesNotMatch(emailService, /href="https:\/\/bolos\.mogambo\.xyz\/login"/);
+  assert.match(emailService, /getPublicAppUrl\(\)/);
+  assert.match(publicAppUrl, /process\.env\.NEXT_PUBLIC_APP_URL/);
+  assert.match(publicAppUrl, /url\.username/);
+  assert.match(publicAppUrl, /url\.search/);
 });

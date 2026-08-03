@@ -20,19 +20,11 @@ import {
   hashAuthToken,
   RateLimitExceededError,
 } from '../services/account-security'
+import { getPublicAppUrl } from '../services/public-app-url'
 
 const SALT_ROUNDS = 10
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync(crypto.randomUUID(), SALT_ROUNDS)
 const GENERIC_SIGNUP_RESULT = { requiresVerification: true as const }
-
-function getPublicAppUrl(): string {
-  const configured = process.env.NEXT_PUBLIC_APP_URL ?? 'https://bolos.mogambo.xyz'
-  const url = new URL(configured)
-  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
-    throw new Error('NEXT_PUBLIC_APP_URL must be an HTTP(S) URL without credentials')
-  }
-  return configured.replace(/\/+$/, '')
-}
 
 function isEmailUniqueViolation(error: unknown): boolean {
   let current: unknown = error
@@ -60,7 +52,7 @@ async function queueVerificationEmail(
   const now = new Date()
   const rawToken = createAuthToken()
   const tokenHash = hashAuthToken(rawToken)
-  const verificationUrl = `${getPublicAppUrl()}/verify-email?token=${encodeURIComponent(rawToken)}`
+  const verificationUrl = `${getPublicAppUrl()}/verify-email#token=${encodeURIComponent(rawToken)}`
 
   await db
     .update(authTokens)
@@ -405,7 +397,7 @@ export const authRouter = router({
 
       const rawToken = createAuthToken()
       const tokenHash = hashAuthToken(rawToken)
-      const resetUrl = `${getPublicAppUrl()}/reset-password?token=${encodeURIComponent(rawToken)}`
+      const resetUrl = `${getPublicAppUrl()}/reset-password#token=${encodeURIComponent(rawToken)}`
       const now = new Date()
       await ctx.db.transaction(async (tx) => {
         await tx

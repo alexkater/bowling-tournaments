@@ -7,7 +7,7 @@ export const userCredentials = pgTable('user_credentials', {
   profileId: text().notNull().references(() => profiles.id, { onDelete: 'cascade' }).unique(),
   email: text().notNull().unique(),
   passwordHash: text().notNull(),
-  emailVerifiedAt: timestamp({ withTimezone: true }).defaultNow(),
+  emailVerifiedAt: timestamp({ withTimezone: true }),
   authVersion: integer().notNull().default(0),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
