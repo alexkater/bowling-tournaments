@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const [webDockerfile, deployServer, productionCompose, communicationsPlan] = await Promise.all([
+const [webDockerfile, deployServer, productionCompose, communicationsPlan, apiServer, envExample] = await Promise.all([
   readFile(new URL('../Dockerfile.web', import.meta.url), 'utf8'),
   readFile(new URL('./deploy-server.sh', import.meta.url), 'utf8'),
   readFile(new URL('../docker-compose.prod.yml', import.meta.url), 'utf8'),
   readFile(new URL('../docs/comms-hardening-plan.md', import.meta.url), 'utf8'),
+  readFile(new URL('../apps/api/src/server.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../.env.example', import.meta.url), 'utf8'),
 ]);
 
 test('Next.js standalone listens on every container interface', () => {
@@ -41,4 +43,17 @@ test('production email delivery requires an explicit verified sender', () => {
   assert.match(communicationsPlan, /RESEND_API_KEY/);
   assert.match(communicationsPlan, /EMAIL_FROM/);
   assert.match(communicationsPlan, /verified/i);
+  assert.match(envExample, /^EMAIL_FROM=/m);
+  assert.match(envExample, /^JWT_SECRET=/m);
+});
+
+test('production API receives the canonical app URL for account action links', () => {
+  const apiService = productionCompose.split('\n  api:\n', 2)[1]?.split('\n  web:\n', 1)[0];
+  assert.ok(apiService, 'api service is required');
+  assert.match(apiService, /NEXT_PUBLIC_APP_URL: \$\{NEXT_PUBLIC_APP_URL:\?NEXT_PUBLIC_APP_URL is required\}/);
+});
+
+test('API trusts one proxy hop and supplies the action-link secret to the email worker', () => {
+  assert.match(apiServer, /Fastify\(\{ logger: true, trustProxy: 1 \}\)/);
+  assert.match(apiServer, /actionLinkSecret: process\.env\.JWT_SECRET/);
 });

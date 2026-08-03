@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, integer } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 import { profiles } from './profiles'
 
@@ -7,6 +7,8 @@ export const userCredentials = pgTable('user_credentials', {
   profileId: text().notNull().references(() => profiles.id, { onDelete: 'cascade' }).unique(),
   email: text().notNull().unique(),
   passwordHash: text().notNull(),
+  emailVerifiedAt: timestamp({ withTimezone: true }).defaultNow(),
+  authVersion: integer().notNull().default(0),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 })

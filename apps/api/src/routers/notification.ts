@@ -6,6 +6,9 @@ import { TRPCError } from '@trpc/server'
 import { requireAuth, requireOrgAccess, requireOrgRole } from '../middleware/auth'
 import { createNotification } from '../services/notifications'
 import { queueEmail } from '../services/email'
+import { consumeRateLimit, RateLimitExceededError } from '../services/account-security'
+
+const MAX_ANNOUNCEMENT_RECIPIENTS = 500
 
 export const notificationRouter = router({
   broadcast: procedure
@@ -44,6 +47,42 @@ export const notificationRouter = router({
             eq(tournamentPlayers.tournamentId, tournament.id),
             inArray(tournamentPlayers.status, ['confirmed', 'waitlisted']),
           ))
+
+        const [existingDelivery] = await tx
+          .select({ id: notifications.id })
+          .from(notifications)
+          .where(sql`${notifications.id} LIKE ${`announcement:${input.clientMutationId}:%`}`)
+          .limit(1)
+        if (existingDelivery) return { recipients: recipients.length }
+
+        if (recipients.length > MAX_ANNOUNCEMENT_RECIPIENTS) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `Announcement audience exceeds the ${MAX_ANNOUNCEMENT_RECIPIENTS} recipient limit`,
+          })
+        }
+
+        const rateLimitSecret = process.env.JWT_SECRET
+        if (!rateLimitSecret) throw new Error('JWT_SECRET environment variable is required')
+        try {
+          await consumeRateLimit({
+            db: tx,
+            secret: rateLimitSecret,
+            action: 'organizer_announcement',
+            identifiers: [ctx.ip, ctx.userId!, ctx.orgId!, tournament.id],
+            limit: 5,
+            windowMs: 10 * 60_000,
+          })
+        } catch (error) {
+          if (error instanceof RateLimitExceededError) {
+            throw new TRPCError({
+              code: 'TOO_MANY_REQUESTS',
+              message: 'Too many announcements. Please try again later.',
+              cause: error,
+            })
+          }
+          throw error
+        }
 
         for (const recipient of recipients) {
           await createNotification({

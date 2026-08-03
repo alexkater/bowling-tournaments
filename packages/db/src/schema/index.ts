@@ -9,4 +9,5 @@ export { bracketPools, bracketPoolsRelations, bracketRounds, bracketRoundsRelati
 export { sidepots, sidepotsRelations, sidepotEntries, sidepotEntriesRelations } from './sidepots'
 export { paymentTransactions, paymentTransactionsRelations } from './payments'
 export { userCredentials, userCredentialsRelations } from './user_credentials'
+export { authTokens, authRateLimits } from './auth_security'
 export { notifications, emailLogs } from './communications'

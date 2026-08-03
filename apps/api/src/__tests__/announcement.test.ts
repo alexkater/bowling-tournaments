@@ -11,11 +11,12 @@ const queryClient = postgres(
 )
 const db = drizzle(queryClient, { schema })
 
-function caller(userId: string, orgId: string) {
+function caller(userId: string, orgId: string, ip = '198.51.100.77') {
   return appRouter.createCaller({
     db,
     userId,
     orgId,
+    ip,
     req: {} as never,
     res: {} as never,
   })
@@ -88,6 +89,7 @@ async function seedTournament(organizationId: string, playerIds: string[]) {
 }
 
 beforeEach(async () => {
+  await queryClient`DELETE FROM auth_rate_limits`
   await queryClient`DROP TABLE IF EXISTS pg_temp.notifications`
   await queryClient`DROP TABLE IF EXISTS pg_temp.email_logs`
   await queryClient`
@@ -160,6 +162,27 @@ describe('organizer announcements', () => {
     expect(second).toEqual({ recipients: 2 })
     expect(notificationRows).toHaveLength(2)
     expect(emailRows).toHaveLength(2)
+  })
+
+  it('rate limits the sixth distinct announcement in ten minutes', async () => {
+    const organization = await seedOrganization('announcement-rate-owner')
+    const tournament = await seedTournament(organization.id, ['announcement-rate-player'])
+    const c = caller('announcement-rate-owner', organization.id, '203.0.113.108')
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await expect(c.notification.broadcast({
+        tournamentId: tournament.id,
+        clientMutationId: crypto.randomUUID(),
+        subject: `Aviso ${attempt + 1}`,
+        body: 'Mensaje válido.',
+      })).resolves.toEqual({ recipients: 1 })
+    }
+    await expect(c.notification.broadcast({
+      tournamentId: tournament.id,
+      clientMutationId: crypto.randomUUID(),
+      subject: 'Aviso 6',
+      body: 'Debe bloquearse.',
+    })).rejects.toThrow(/too many announcements/i)
   })
 
   it('hides tournaments owned by another organization', async () => {

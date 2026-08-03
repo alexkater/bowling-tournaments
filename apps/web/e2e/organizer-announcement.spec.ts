@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 import { createTRPCProxyClient, httpBatchLink } from '@trpc/client'
 import superjson from 'superjson'
 import type { AppRouter } from '@bowling/api'
+import { actionToken, latestActionUrl } from './helpers/account'
 
 const apiUrl = 'http://localhost:3001/trpc'
 
@@ -34,6 +35,15 @@ test.describe('Organizer announcements', () => {
     await page.getByLabel('Email address').fill(organizerEmail)
     await page.getByLabel('Password').fill('safe-test-password')
     await page.getByRole('button', { name: 'Create account' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible()
+    const organizerVerificationUrl = new URL(await latestActionUrl(organizerEmail, 'verify_email'))
+    await page.goto(`${organizerVerificationUrl.pathname}${organizerVerificationUrl.search}`)
+    await expect(page.getByRole('heading', { name: 'Email verified' })).toBeVisible()
+    await page.getByRole('link', { name: 'Sign in' }).click()
+    await page.getByLabel('Email address').fill(organizerEmail)
+    await page.getByLabel('Password').fill('safe-test-password')
+    await page.getByRole('button', { name: 'Sign in' }).click()
     await expect(page).toHaveURL(/\/dashboard$/)
 
     const organizerToken = await page.evaluate(() => localStorage.getItem('auth_token'))
@@ -69,14 +79,21 @@ test.describe('Organizer announcements', () => {
       }],
     })
 
-    const signup = await apiClient().auth.signup.mutate({
+    await apiClient().auth.signup.mutate({
       firstName: 'Announcement',
       lastName: 'Player',
       email: playerEmail,
       password: 'safe-test-password',
       accountType: 'player',
     })
-    const player = apiClient(signup.token)
+    await apiClient().auth.verifyEmail.mutate({
+      token: actionToken(await latestActionUrl(playerEmail, 'verify_email')),
+    })
+    const playerLogin = await apiClient().auth.login.mutate({
+      email: playerEmail,
+      password: 'safe-test-password',
+    })
+    const player = apiClient(playerLogin.token)
     await player.enrollment.register.mutate({ tournamentId: tournament.id })
 
     await page.goto(`/dashboard/tournaments/${tournament.id}/players`)

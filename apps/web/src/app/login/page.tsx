@@ -20,6 +20,7 @@ export default function LoginPage() {
     },
     onError: (err) => setError(err.message),
   })
+  const resendMutation = trpc.auth.resendVerification.useMutation()
 
   function validate(): string | null {
     if (!email.trim()) return 'Email is required'
@@ -65,17 +66,30 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} className="mt-8 space-y-5">
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-steel-300">Email address</label>
-                <input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" className="mt-1.5 block w-full rounded-xl border border-white/10 bg-ink-900 px-4 py-3 text-sm text-white placeholder-steel-600 focus:border-pin-400 focus:outline-none focus:ring-2 focus:ring-pin-400/20 transition-all" />
+                <input id="email" type="email" maxLength={320} value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" className="mt-1.5 block w-full rounded-xl border border-white/10 bg-ink-900 px-4 py-3 text-sm text-white placeholder-steel-600 focus:border-pin-400 focus:outline-none focus:ring-2 focus:ring-pin-400/20 transition-all" />
               </div>
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-steel-300">Password</label>
-                <input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Your password" autoComplete="current-password" className="mt-1.5 block w-full rounded-xl border border-white/10 bg-ink-900 px-4 py-3 text-sm text-white placeholder-steel-600 focus:border-pin-400 focus:outline-none focus:ring-2 focus:ring-pin-400/20 transition-all" />
+                <div className="flex items-center justify-between">
+                  <label htmlFor="password" className="block text-sm font-medium text-steel-300">Password</label>
+                  <Link href="/forgot-password" className="text-xs font-semibold text-pin-300 hover:text-pin-200">Forgot password?</Link>
+                </div>
+                <input id="password" type="password" maxLength={128} value={password} onChange={e => setPassword(e.target.value)} placeholder="Your password" autoComplete="current-password" className="mt-1.5 block w-full rounded-xl border border-white/10 bg-ink-900 px-4 py-3 text-sm text-white placeholder-steel-600 focus:border-pin-400 focus:outline-none focus:ring-2 focus:ring-pin-400/20 transition-all" />
               </div>
               {error && (
                 <div className="flex items-start gap-2 rounded-xl bg-pin-400/10 border border-pin-400/20 p-4 text-sm text-pin-300">
                   <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>{error}</span>
                 </div>
+              )}
+              {error?.toLowerCase().includes('verify your email') && (
+                <button
+                  type="button"
+                  disabled={resendMutation.isPending || resendMutation.isSuccess || !email.trim()}
+                  onClick={() => resendMutation.mutate({ email: email.trim().toLowerCase() })}
+                  className="w-full rounded-xl border border-pin-400/30 px-4 py-2.5 text-sm font-semibold text-pin-200 hover:bg-pin-400/10 disabled:opacity-50"
+                >
+                  {resendMutation.isPending ? 'Sending...' : resendMutation.isSuccess ? 'Verification email queued' : 'Resend verification email'}
+                </button>
               )}
               <button type="submit" disabled={loginMutation.isPending} className="flex w-full items-center justify-center gap-2 rounded-xl bg-pin-400 px-4 py-3 text-sm font-semibold text-white hover:bg-pin-500 disabled:cursor-not-allowed disabled:opacity-50 transition-colors shadow-lg shadow-pin-400/20">
                 {loginMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Signing in...</> : <><LogIn className="h-4 w-4" /> Sign in</>}

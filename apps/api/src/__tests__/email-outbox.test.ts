@@ -7,6 +7,7 @@ import {
   queueEmail,
   startEmailOutboxWorker,
 } from '../services/email'
+import { encryptActionUrl } from '../services/account-security'
 
 const TEST_PROVIDER_CREDENTIAL = ['test', 'provider', 'credential'].join('-')
 
@@ -93,7 +94,7 @@ describe('email outbox', () => {
       db,
       apiKey: 'test-key',
       fetchImpl,
-      now: new Date('2026-08-02T12:00:00Z'),
+      now: new Date('2099-08-02T12:00:00Z'),
     })
     const [row] = await queryClient<{
       status: string
@@ -113,6 +114,77 @@ describe('email outbox', () => {
       providerMessageId: 'resend-message-1',
       sentAt: expect.anything(),
     })
+  })
+
+  it('keeps verification links encrypted at rest and decrypts them only for the provider', async () => {
+    const secret = 'test-only-jwt-secret-with-enough-entropy'
+    const actionUrl = 'https://bolos.mogambo.xyz/verify-email?token=raw-secret-token'
+    await queueEmail({
+      db,
+      idempotencyKey: 'verify-email:profile-1:token-1',
+      profileId: 'profile-1',
+      to: 'player@example.test',
+      template: 'verify_email',
+      data: {
+        firstName: 'Player',
+        actionUrlEncrypted: encryptActionUrl(actionUrl, secret),
+      },
+    })
+
+    let providerBody: Record<string, string> | undefined
+    await processBatch({
+      db,
+      apiKey: TEST_PROVIDER_CREDENTIAL,
+      actionLinkSecret: secret,
+      fetchImpl: async (_url, init) => {
+        providerBody = JSON.parse(String(init?.body)) as Record<string, string>
+        return new Response(JSON.stringify({ id: 'resend-verification-1' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      },
+      now: new Date('2099-08-02T12:00:00Z'),
+    })
+    const [stored] = await queryClient<{ payload: Record<string, string> }[]>`
+      SELECT payload FROM email_logs WHERE "idempotencyKey" = 'verify-email:profile-1:token-1'
+    `
+
+    expect(JSON.stringify(stored.payload)).not.toContain('raw-secret-token')
+    expect(providerBody?.html).toContain(actionUrl)
+    expect(providerBody?.html).not.toContain(stored.payload.actionUrlEncrypted)
+  })
+
+  it('strips CRLF from dynamic provider subjects', async () => {
+    let providerBody: { subject?: string } | undefined
+    await queueEmail({
+      db,
+      idempotencyKey: 'announcement:subject-safety',
+      to: 'player@example.com',
+      template: 'announcement',
+      data: {
+        firstName: 'Player',
+        subject: 'Schedule update\r\nBcc: injected@example.com',
+        body: 'Safe body',
+        tournamentName: 'Open Test',
+      },
+    })
+
+    await processEmailOutboxBatch({
+      db,
+      apiKey: 'test-key',
+      from: 'Strike Manager <verified@example.com>',
+      now: new Date('2099-08-02T12:00:00Z'),
+      fetchImpl: async (_url, init) => {
+        providerBody = JSON.parse(String(init?.body)) as { subject?: string }
+        return new Response(JSON.stringify({ id: 'subject-safe' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      },
+    })
+
+    expect(providerBody?.subject).toBe('📢 Schedule update Bcc: injected@example.com')
+    expect(providerBody?.subject).not.toMatch(/[\r\n]/)
   })
 
   it('preserves multiline announcement paragraphs in escaped HTML', async () => {
@@ -144,7 +216,7 @@ Third line`.replaceAll('\n', '\r\n')
           { status: 200, headers: { 'content-type': 'application/json' } },
         )
       },
-      now: new Date('2026-08-02T12:00:00Z'),
+      now: new Date('2099-08-02T12:00:00Z'),
     })
 
     expect(providerBody?.html).toContain(
@@ -179,7 +251,7 @@ Third line`.replaceAll('\n', '\r\n')
       data: { firstName: 'Wait', tournamentName: 'Open Test' },
     })
 
-    const now = new Date('2026-08-02T12:00:00Z')
+    const now = new Date('2099-08-02T12:00:00Z')
     const rejected = async () => new Response('provider unavailable', { status: 503 })
     const first = await processBatch({
       db,
@@ -229,7 +301,7 @@ Third line`.replaceAll('\n', '\r\n')
       db,
       apiKey: 'test-key',
       fetchImpl: async () => { throw new Error('network down') },
-      now: new Date('2026-08-02T12:00:00Z'),
+      now: new Date('2099-08-02T12:00:00Z'),
     })
     const [row] = await queryClient<{
       status: string
@@ -262,7 +334,7 @@ Third line`.replaceAll('\n', '\r\n')
     })
     await queryClient`
       UPDATE email_logs
-      SET status = 'processing', "lockedAt" = '2026-08-02T11:50:00Z'
+      SET status = 'processing', "lockedAt" = '2099-08-02T11:50:00Z'
       WHERE "idempotencyKey" = 'reminder:tournament-1:profile-4'
     `
 
@@ -273,7 +345,7 @@ Third line`.replaceAll('\n', '\r\n')
         JSON.stringify({ id: 'recovered-message' }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       ),
-      now: new Date('2026-08-02T12:00:00Z'),
+      now: new Date('2099-08-02T12:00:00Z'),
     })
 
     expect(result).toMatchObject({ claimed: 1, sent: 1, failed: 0 })

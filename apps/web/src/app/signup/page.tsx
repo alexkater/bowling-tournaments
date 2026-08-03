@@ -1,20 +1,19 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { trpc } from '@/lib/trpc-provider'
-import { Loader2, AlertCircle, UserPlus } from 'lucide-react'
+import { Loader2, AlertCircle, CheckCircle2, UserPlus } from 'lucide-react'
 import { LogoMark } from '@/components/Logo'
 
 export default function SignupPage() {
-  const router = useRouter()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [accountType, setAccountType] = useState<'organizer' | 'player'>('organizer')
   const [error, setError] = useState<string | null>(null)
+  const [submittedEmail, setSubmittedEmail] = useState<string | null>(null)
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('type') === 'player') {
@@ -23,12 +22,10 @@ export default function SignupPage() {
   }, [])
 
   const signupMutation = trpc.auth.signup.useMutation({
-    onSuccess: (data) => {
-      localStorage.setItem('auth_token', data.token)
-      router.push(data.profile.role === 'player' ? '/tournaments' : '/dashboard')
-    },
+    onSuccess: () => setSubmittedEmail(email.trim().toLowerCase()),
     onError: (err) => setError(err.message),
   })
+  const resendMutation = trpc.auth.resendVerification.useMutation()
 
   function validate(): string | null {
     if (!firstName.trim()) return 'First name is required'
@@ -36,7 +33,7 @@ export default function SignupPage() {
     if (!email.trim()) return 'Email is required'
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Invalid email format'
     if (!password) return 'Password is required'
-    if (password.length < 6) return 'Password must be at least 6 characters'
+    if (password.length < 8) return 'Password must be at least 8 characters'
     return null
   }
 
@@ -50,6 +47,33 @@ export default function SignupPage() {
       password,
       accountType,
     })
+  }
+
+  if (submittedEmail) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-ink-900 px-6">
+        <div className="w-full max-w-md rounded-2xl border border-white/5 bg-ink-800/50 p-8 text-center">
+          <LogoMark className="mx-auto h-10 w-auto" />
+          <CheckCircle2 className="mx-auto mt-6 h-12 w-12 text-emerald-400" />
+          <h1 className="mt-4 text-2xl font-bold text-white">Check your email</h1>
+          <p className="mt-2 text-sm text-steel-400">
+            If the account can be verified, we sent a secure link to <span className="text-white">{submittedEmail}</span>.
+          </p>
+          <button
+            type="button"
+            disabled={resendMutation.isPending || resendMutation.isSuccess}
+            onClick={() => resendMutation.mutate({ email: submittedEmail })}
+            className="mt-6 w-full rounded-xl border border-white/10 px-4 py-3 text-sm font-semibold text-steel-200 hover:bg-white/5 disabled:opacity-50"
+          >
+            {resendMutation.isPending ? 'Sending...' : resendMutation.isSuccess ? 'Email queued' : 'Resend verification email'}
+          </button>
+          {resendMutation.error && <p className="mt-3 text-sm text-pin-300">{resendMutation.error.message}</p>}
+          <Link href="/login" className="mt-5 inline-block text-sm font-semibold text-pin-300 hover:text-pin-200">
+            Go to sign in
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -98,20 +122,20 @@ export default function SignupPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="firstName" className="block text-sm font-medium text-steel-300">First name</label>
-                  <input id="firstName" type="text" value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="John" autoComplete="given-name" className="mt-1.5 block w-full rounded-xl border border-white/10 bg-ink-900 px-4 py-3 text-sm text-white placeholder-steel-600 focus:border-pin-400 focus:outline-none focus:ring-2 focus:ring-pin-400/20 transition-all" />
+                  <input id="firstName" type="text" maxLength={100} value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="John" autoComplete="given-name" className="mt-1.5 block w-full rounded-xl border border-white/10 bg-ink-900 px-4 py-3 text-sm text-white placeholder-steel-600 focus:border-pin-400 focus:outline-none focus:ring-2 focus:ring-pin-400/20 transition-all" />
                 </div>
                 <div>
                   <label htmlFor="lastName" className="block text-sm font-medium text-steel-300">Last name</label>
-                  <input id="lastName" type="text" value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Doe" autoComplete="family-name" className="mt-1.5 block w-full rounded-xl border border-white/10 bg-ink-900 px-4 py-3 text-sm text-white placeholder-steel-600 focus:border-pin-400 focus:outline-none focus:ring-2 focus:ring-pin-400/20 transition-all" />
+                  <input id="lastName" type="text" maxLength={100} value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Doe" autoComplete="family-name" className="mt-1.5 block w-full rounded-xl border border-white/10 bg-ink-900 px-4 py-3 text-sm text-white placeholder-steel-600 focus:border-pin-400 focus:outline-none focus:ring-2 focus:ring-pin-400/20 transition-all" />
                 </div>
               </div>
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-steel-300">Email address</label>
-                <input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" className="mt-1.5 block w-full rounded-xl border border-white/10 bg-ink-900 px-4 py-3 text-sm text-white placeholder-steel-600 focus:border-pin-400 focus:outline-none focus:ring-2 focus:ring-pin-400/20 transition-all" />
+                <input id="email" type="email" maxLength={320} value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" className="mt-1.5 block w-full rounded-xl border border-white/10 bg-ink-900 px-4 py-3 text-sm text-white placeholder-steel-600 focus:border-pin-400 focus:outline-none focus:ring-2 focus:ring-pin-400/20 transition-all" />
               </div>
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-steel-300">Password</label>
-                <input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 6 characters" autoComplete="new-password" className="mt-1.5 block w-full rounded-xl border border-white/10 bg-ink-900 px-4 py-3 text-sm text-white placeholder-steel-600 focus:border-pin-400 focus:outline-none focus:ring-2 focus:ring-pin-400/20 transition-all" />
+                <input id="password" type="password" maxLength={128} value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 8 characters" autoComplete="new-password" className="mt-1.5 block w-full rounded-xl border border-white/10 bg-ink-900 px-4 py-3 text-sm text-white placeholder-steel-600 focus:border-pin-400 focus:outline-none focus:ring-2 focus:ring-pin-400/20 transition-all" />
               </div>
               {error && (
                 <div className="flex items-start gap-2 rounded-xl bg-pin-400/10 border border-pin-400/20 p-4 text-sm text-pin-300">

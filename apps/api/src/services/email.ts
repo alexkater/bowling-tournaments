@@ -2,6 +2,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import { eq, sql } from 'drizzle-orm'
 import { emailLogs } from '@bowling/db'
 import crypto from 'crypto'
+import { decryptActionUrl } from './account-security'
 
 export type EmailTemplate =
   | 'welcome'
@@ -11,6 +12,8 @@ export type EmailTemplate =
   | 'results'
   | 'cancellation'
   | 'announcement'
+  | 'verify_email'
+  | 'password_reset'
 
 export interface QueueEmailParams {
   db: PostgresJsDatabase<any>
@@ -56,6 +59,7 @@ interface ProcessEmailOutboxOptions {
   fetchImpl?: typeof fetch
   now?: Date
   limit?: number
+  actionLinkSecret?: string
 }
 
 interface ClaimedEmail {
@@ -143,7 +147,7 @@ export async function processEmailOutboxBatch(options: ProcessEmailOutboxOptions
           from,
           to: delivery.to,
           subject: getSubject(delivery.template, delivery.payload),
-          html: renderTemplate(delivery.template, delivery.payload),
+          html: renderTemplate(delivery.template, delivery.payload, options.actionLinkSecret),
         }),
       })
 
@@ -181,6 +185,7 @@ interface StartEmailWorkerOptions {
   from?: string
   intervalMs?: number
   onError?: (error: unknown) => void
+  actionLinkSecret?: string
 }
 
 export function startEmailOutboxWorker(options: StartEmailWorkerOptions) {
@@ -199,6 +204,7 @@ export function startEmailOutboxWorker(options: StartEmailWorkerOptions) {
         db: options.db,
         apiKey: options.apiKey,
         from: options.from,
+        actionLinkSecret: options.actionLinkSecret,
       })
     } catch (error) {
       options.onError?.(error)
@@ -215,14 +221,20 @@ export function startEmailOutboxWorker(options: StartEmailWorkerOptions) {
 
 function getSubject(template: EmailTemplate, data: Record<string, string>): string {
   switch (template) {
-    case 'welcome': return `¡Bienvenido a Strike Manager, ${data.firstName}!`
-    case 'enrollment_confirmed': return `✅ Inscripción confirmada — ${data.tournamentName}`
-    case 'waitlisted': return `⏳ Lista de espera — ${data.tournamentName}`
-    case 'tournament_reminder': return `⏰ ${data.tournamentName} empieza mañana`
-    case 'results': return `🏆 Resultados — ${data.tournamentName}`
-    case 'cancellation': return `❌ Inscripción cancelada — ${data.tournamentName}`
-    case 'announcement': return `📢 ${data.subject}`
+    case 'welcome': return sanitizeSubject(`¡Bienvenido a Strike Manager, ${data.firstName}!`)
+    case 'enrollment_confirmed': return sanitizeSubject(`✅ Inscripción confirmada — ${data.tournamentName}`)
+    case 'waitlisted': return sanitizeSubject(`⏳ Lista de espera — ${data.tournamentName}`)
+    case 'tournament_reminder': return sanitizeSubject(`⏰ ${data.tournamentName} empieza mañana`)
+    case 'results': return sanitizeSubject(`🏆 Resultados — ${data.tournamentName}`)
+    case 'cancellation': return sanitizeSubject(`❌ Inscripción cancelada — ${data.tournamentName}`)
+    case 'announcement': return sanitizeSubject(`📢 ${data.subject}`)
+    case 'verify_email': return 'Verifica tu cuenta de Strike Manager'
+    case 'password_reset': return 'Restablece tu contraseña de Strike Manager'
   }
+}
+
+function sanitizeSubject(value: string): string {
+  return value.replace(/[\r\n]+/g, ' ').trim().slice(0, 200)
 }
 
 function escapeHtml(value: string | undefined): string {
@@ -234,7 +246,11 @@ function escapeHtml(value: string | undefined): string {
     .replaceAll("'", '&#039;')
 }
 
-function renderTemplate(template: EmailTemplate, data: Record<string, string>): string {
+function renderTemplate(
+  template: EmailTemplate,
+  data: Record<string, string>,
+  actionLinkSecret?: string,
+): string {
   const safe = Object.fromEntries(
     Object.entries(data).map(([key, value]) => [key, escapeHtml(value)]),
   ) as Record<string, string>
@@ -274,5 +290,21 @@ function renderTemplate(template: EmailTemplate, data: Record<string, string>): 
       return base(`<h2>📢 ${safe.subject}</h2>
         <p>${(safe.body ?? '').replace(/\r?\n/g, '<br>')}</p>
         <p>Sobre el torneo: <strong>${safe.tournamentName}</strong></p>`)
+    case 'verify_email': {
+      if (!actionLinkSecret) throw new Error('Action-link encryption secret is required')
+      const actionUrl = escapeHtml(decryptActionUrl(data.actionUrlEncrypted ?? '', actionLinkSecret))
+      return base(`<h2>Verifica tu cuenta</h2>
+        <p>Hola ${safe.firstName}, confirma que este correo te pertenece para activar tu cuenta.</p>
+        <p><a href="${actionUrl}" style="display:inline-block;background:#f59e0b;color:#0f172a;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:700">Verificar mi cuenta</a></p>
+        <p style="color:#94a3b8;font-size:13px">Este enlace expira en 24 horas. Si no creaste esta cuenta, ignora el mensaje.</p>`)
+    }
+    case 'password_reset': {
+      if (!actionLinkSecret) throw new Error('Action-link encryption secret is required')
+      const actionUrl = escapeHtml(decryptActionUrl(data.actionUrlEncrypted ?? '', actionLinkSecret))
+      return base(`<h2>Restablece tu contraseña</h2>
+        <p>Hola ${safe.firstName}, recibimos una solicitud para cambiar tu contraseña.</p>
+        <p><a href="${actionUrl}" style="display:inline-block;background:#f59e0b;color:#0f172a;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:700">Cambiar mi contraseña</a></p>
+        <p style="color:#94a3b8;font-size:13px">Este enlace expira en 60 minutos. Si no solicitaste el cambio, ignora el mensaje.</p>`)
+    }
   }
 }
