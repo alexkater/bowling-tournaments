@@ -5,6 +5,11 @@ import { squads, tournamentPlayers, stages } from '@bowling/db'
 import { TRPCError } from '@trpc/server'
 import { wsManager } from '../ws/manager'
 import { enterScore as enterScoreService, getScoreSheet } from '../services/score.service'
+import { requireOrgAccess, requireOrgRole } from '../middleware/auth'
+import {
+  assertStageInOrganization,
+  assertTournamentPlayersInOrganization,
+} from '../services/tournament-resource-access'
 
 const MAX_GAMES_PER_PLAYER = 12
 const MIN_SCORE = 0
@@ -62,8 +67,12 @@ export const squadRouter = router({
     }),
 
   create: procedure
+    .use(requireOrgAccess)
+    .use(requireOrgRole(['owner', 'admin']))
     .input(CreateSquadSchema)
     .mutation(async ({ ctx, input }) => {
+      await assertStageInOrganization(ctx.db, input.stageId, ctx.orgId)
+
       const [stage] = await ctx.db
         .select({ id: stages.id })
         .from(stages)
@@ -94,8 +103,15 @@ export const squadRouter = router({
     }),
 
   enterScore: procedure
+    .use(requireOrgAccess)
+    .use(requireOrgRole(['owner', 'admin', 'scorer']))
     .input(ScoreEntrySchema)
     .mutation(async ({ ctx, input }) => {
+      await assertTournamentPlayersInOrganization(
+        ctx.db,
+        [input.tournamentPlayerId],
+        ctx.orgId,
+      )
       const result = await enterScoreService(ctx.db, input)
       const [tp] = await ctx.db
         .select({ squadId: tournamentPlayers.squadId })
@@ -109,12 +125,19 @@ export const squadRouter = router({
     }),
 
   batchEnterScores: procedure
+    .use(requireOrgAccess)
+    .use(requireOrgRole(['owner', 'admin', 'scorer']))
     .input(
       z.object({
         scores: z.array(ScoreEntrySchema).min(1).max(50),
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await assertTournamentPlayersInOrganization(
+        ctx.db,
+        input.scores.map((score) => score.tournamentPlayerId),
+        ctx.orgId,
+      )
       const results = []
       const squadIds = new Set<string>()
       for (const score of input.scores) {

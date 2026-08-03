@@ -18,6 +18,13 @@ import {
   transition,
 } from '@bowling/shared'
 import { TRPCError } from '@trpc/server'
+import { requireOrgAccess, requireOrgRole } from '../middleware/auth'
+import {
+  assertBracketMatchInOrganization,
+  assertBracketPoolInOrganization,
+  assertTournamentInOrganization,
+  assertTournamentPlayersInOrganization,
+} from '../services/tournament-resource-access'
 
 type BracketUtilType = 'forward' | 'reverse' | 'eliminator'
 
@@ -58,6 +65,8 @@ export const bracketRouter = router({
     }),
 
   createPool: procedure
+    .use(requireOrgAccess)
+    .use(requireOrgRole(['owner', 'admin']))
     .input(
       z.object({
         tournamentId: z.string().uuid(),
@@ -83,6 +92,8 @@ export const bracketRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await assertTournamentInOrganization(ctx.db, input.tournamentId, ctx.orgId)
+
       const [pool] = await ctx.db
         .insert(bracketPools)
         .values({
@@ -112,6 +123,8 @@ export const bracketRouter = router({
     }),
 
   joinPool: procedure
+    .use(requireOrgAccess)
+    .use(requireOrgRole(['owner', 'admin']))
     .input(
       z.object({
         poolId: z.string(),
@@ -119,6 +132,11 @@ export const bracketRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await Promise.all([
+        assertBracketPoolInOrganization(ctx.db, input.poolId, ctx.orgId),
+        assertTournamentPlayersInOrganization(ctx.db, [input.playerId], ctx.orgId),
+      ])
+
       const [pool] = await ctx.db
         .select()
         .from(bracketPools)
@@ -203,8 +221,12 @@ export const bracketRouter = router({
     }),
 
   shuffle: procedure
+    .use(requireOrgAccess)
+    .use(requireOrgRole(['owner', 'admin', 'scorer']))
     .input(z.object({ poolId: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      await assertBracketPoolInOrganization(ctx.db, input.poolId, ctx.orgId)
+
       const [pool] = await ctx.db
         .select()
         .from(bracketPools)
@@ -282,6 +304,8 @@ export const bracketRouter = router({
     }),
 
   enterScore: procedure
+    .use(requireOrgAccess)
+    .use(requireOrgRole(['owner', 'admin', 'scorer']))
     .input(
       z.object({
         matchId: z.string(),
@@ -290,6 +314,8 @@ export const bracketRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await assertBracketMatchInOrganization(ctx.db, input.matchId, ctx.orgId)
+
       const [match] = await ctx.db
         .select()
         .from(bracketMatches)
@@ -334,8 +360,12 @@ export const bracketRouter = router({
     }),
 
   advanceRound: procedure
+    .use(requireOrgAccess)
+    .use(requireOrgRole(['owner', 'admin', 'scorer']))
     .input(z.object({ poolId: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      await assertBracketPoolInOrganization(ctx.db, input.poolId, ctx.orgId)
+
       const [pool] = await ctx.db
         .select()
         .from(bracketPools)
