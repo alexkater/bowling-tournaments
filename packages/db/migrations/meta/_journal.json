@@ -64,6 +64,13 @@
       "when": 1785766989640,
       "tag": "0008_drop-email-verification-default",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785792897873,
+      "tag": "0009_score_audit_integrity",
+      "breakpoints": true
     }
   ]
 }
