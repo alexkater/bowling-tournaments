@@ -12,6 +12,12 @@ import {
   calculateHandicap,
 } from '@bowling/shared'
 import type { HandicapConfig } from '@bowling/shared'
+import { requireOrgAccess, requireOrgRole } from '../middleware/auth'
+import {
+  assertSidepotInOrganization,
+  assertTournamentInOrganization,
+  assertTournamentPlayersInOrganization,
+} from '../services/tournament-resource-access'
 import {
   getSidepotOrThrow,
   getEntriesForSidepot,
@@ -78,8 +84,12 @@ export const sidepotRouter = router({
     }),
 
   create: procedure
+    .use(requireOrgAccess)
+    .use(requireOrgRole(['owner', 'admin']))
     .input(CreateSidepotSchema)
     .mutation(async ({ ctx, input }) => {
+      await assertTournamentInOrganization(ctx.db, input.tournamentId, ctx.orgId)
+
       const config = {
         handicap: input.config?.handicap ?? false,
         maxEntries: input.config?.maxEntries ?? null,
@@ -97,8 +107,20 @@ export const sidepotRouter = router({
     }),
 
   join: procedure
+    .use(requireOrgAccess)
+    .use(requireOrgRole(['owner', 'admin']))
     .input(z.object({ sidepotId: z.string(), tournamentPlayerId: z.string() }))
-    .mutation(async ({ ctx, input }) => joinSidepotService(ctx.db, input)),
+    .mutation(async ({ ctx, input }) => {
+      await Promise.all([
+        assertSidepotInOrganization(ctx.db, input.sidepotId, ctx.orgId),
+        assertTournamentPlayersInOrganization(
+          ctx.db,
+          [input.tournamentPlayerId],
+          ctx.orgId,
+        ),
+      ])
+      return joinSidepotService(ctx.db, input)
+    }),
 
   calculateResults: procedure
     .input(z.string())
