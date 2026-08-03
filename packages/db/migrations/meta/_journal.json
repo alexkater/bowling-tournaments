@@ -50,6 +50,13 @@
       "when": 1785597542155,
       "tag": "0006_little_molecule_man",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785760694841,
+      "tag": "0007_flashy_scarlet_witch",
+      "breakpoints": true
     }
   ]
 }

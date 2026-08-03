@@ -8,7 +8,7 @@ import { wsManager } from './ws/manager'
 import { db } from './db'
 import { startEmailOutboxWorker } from './services/email'
 
-const server = Fastify({ logger: true })
+const server = Fastify({ logger: true, trustProxy: 1 })
 
 async function bootstrap() {
   await server.register(cors, { origin: true })
@@ -36,6 +36,7 @@ async function bootstrap() {
     db,
     apiKey: process.env.RESEND_API_KEY,
     from: process.env.EMAIL_FROM,
+    actionLinkSecret: process.env.JWT_SECRET,
     onError: (error) => server.log.error(error, 'Email outbox worker failed'),
   })
 

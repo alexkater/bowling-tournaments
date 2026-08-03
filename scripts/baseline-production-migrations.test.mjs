@@ -24,6 +24,7 @@ test('migration plan contains every journal entry with a stable hash', async () 
       '0004_numerous_wolfpack',
       '0005_easy_slapstick',
       '0006_little_molecule_man',
+      '0007_flashy_scarlet_witch',
     ],
   );
   assert.ok(plan.every((migration) => /^[a-f0-9]{64}$/.test(migration.hash)));
@@ -33,13 +34,16 @@ test('expected migration schema includes credentials and tenant constraints', as
   const plan = await loadMigrationPlan(migrationsDir);
   const expected = extractExpectedSchema(plan);
 
-  assert.equal(expected.tables.size, 18);
+  assert.equal(expected.tables.size, 20);
   assert.ok(expected.tables.has('user_credentials'));
   assert.ok(expected.tables.has('notifications'));
   assert.ok(expected.tables.has('email_logs'));
+  assert.ok(expected.tables.has('auth_tokens'));
+  assert.ok(expected.tables.has('auth_rate_limits'));
   assert.ok(expected.constraints.has('user_credentials_email_unique'));
   assert.ok(expected.constraints.has('organization_members_organization_profile_unique'));
   assert.ok(expected.constraints.has('email_logs_idempotencyKey_unique'));
+  assert.ok(expected.constraints.has('auth_tokens_tokenHash_unique'));
 });
 
 test('production baseline stops before the pending tenant constraints migration', async () => {
