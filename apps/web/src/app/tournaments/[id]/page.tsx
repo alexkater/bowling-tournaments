@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import { useState } from 'react'
 import { ArrowLeft, CalendarDays, CheckCircle, Clock, ListChecks, Loader2, LogIn, Trophy, UserPlus, Users, XCircle } from 'lucide-react'
 import { Logo } from '@/components/Logo'
+import { DocumentsSection } from '@/components/DocumentsSection'
 import { trpc } from '@/lib/trpc-provider'
 
 function formatDate(date: Date) {
@@ -140,6 +141,9 @@ export default function PublicTournamentDetailPage() {
                 </div>
               ))}
             </div>
+
+            {/* Tournament documents */}
+            <DocumentsSection tournamentId={id} />
           </div>
 
           {/* ── Registration sidebar ── */}

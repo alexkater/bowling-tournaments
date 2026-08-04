@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { eq, desc, and, inArray } from 'drizzle-orm'
 import { router, procedure } from '../trpc'
 import { TournamentBaseSchema, validateTournament } from '@bowling/shared'
-import { tournaments, stages, tournamentPlayers, squads, profiles } from '@bowling/db'
+import { tournaments, stages, tournamentPlayers, squads, profiles, tournamentDocuments } from '@bowling/db'
 import { TRPCError } from '@trpc/server'
 import postgres from 'postgres'
 import type { TournamentInput } from '@bowling/shared'
@@ -298,5 +298,139 @@ export const tournamentRouter = router({
       }
 
       return tp
+    }),
+
+  /** List documents for a tournament (publicly accessible) */
+  documents: procedure
+    .input(z.object({ tournamentId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      // Verify tournament exists and is publicly visible
+      const [tournament] = await ctx.db
+        .select({ id: tournaments.id, status: tournaments.status })
+        .from(tournaments)
+        .where(eq(tournaments.id, input.tournamentId))
+        .limit(1)
+
+      if (!tournament) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      const docs = await ctx.db
+        .select()
+        .from(tournamentDocuments)
+        .where(eq(tournamentDocuments.tournamentId, input.tournamentId))
+        .orderBy(tournamentDocuments.createdAt)
+
+      return docs
+    }),
+
+  /** Upload a document to a tournament (organizer only) */
+  addDocument: procedure
+    .use(requireOrgAccess)
+    .use(requireOrgRole(['owner', 'admin']))
+    .input(z.object({
+      tournamentId: z.string().uuid(),
+      title: z.string().min(1).max(200),
+      description: z.string().max(500).optional(),
+      fileName: z.string().min(1),
+      fileSize: z.number().min(1).max(50 * 1024 * 1024), // 50 MB max
+      mimeType: z.string().default('application/octet-stream'),
+      contentBase64: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify tournament belongs to org
+      const [tournament] = await ctx.db
+        .select({ id: tournaments.id })
+        .from(tournaments)
+        .where(
+          and(
+            eq(tournaments.id, input.tournamentId),
+            eq(tournaments.organizationId, ctx.orgId),
+          ),
+        )
+        .limit(1)
+
+      if (!tournament) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      }
+
+      // Decode and store file
+      const buffer = Buffer.from(input.contentBase64, 'base64')
+      if (buffer.length !== input.fileSize) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'File size mismatch' })
+      }
+
+      const uploadsDir = process.env.UPLOADS_DIR ?? '/tmp/bowling-uploads'
+      const { mkdirSync, writeFileSync } = await import('node:fs')
+      const path = await import('node:path')
+      const docDir = path.join(uploadsDir, input.tournamentId)
+      mkdirSync(docDir, { recursive: true })
+
+      const docId = crypto.randomUUID()
+      const ext = path.extname(input.fileName) || ''
+      const storedName = `${docId}${ext}`
+      const filePath = path.join(docDir, storedName)
+      writeFileSync(filePath, buffer)
+
+      const [doc] = await ctx.db
+        .insert(tournamentDocuments)
+        .values({
+          id: docId,
+          tournamentId: input.tournamentId,
+          organizationId: ctx.orgId,
+          title: input.title,
+          description: input.description ?? null,
+          fileName: input.fileName,
+          fileSize: input.fileSize,
+          mimeType: input.mimeType,
+        })
+        .returning()
+
+      if (!doc) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to save document' })
+      }
+
+      return doc
+    }),
+
+  /** Delete a document from a tournament (organizer only) */
+  deleteDocument: procedure
+    .use(requireOrgAccess)
+    .use(requireOrgRole(['owner', 'admin']))
+    .input(z.object({
+      documentId: z.string().uuid(),
+      tournamentId: z.string().uuid(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify document exists and belongs to org
+      const [doc] = await ctx.db
+        .select()
+        .from(tournamentDocuments)
+        .where(
+          and(
+            eq(tournamentDocuments.id, input.documentId),
+            eq(tournamentDocuments.tournamentId, input.tournamentId),
+            eq(tournamentDocuments.organizationId, ctx.orgId),
+          ),
+        )
+        .limit(1)
+
+      if (!doc) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Document not found' })
+      }
+
+      // Delete file from disk
+      const { unlinkSync } = await import('node:fs')
+      const path = await import('node:path')
+      const uploadsDir = process.env.UPLOADS_DIR ?? '/tmp/bowling-uploads'
+      const ext = path.extname(doc.fileName) || ''
+      const filePath = path.join(uploadsDir, input.tournamentId, `${doc.id}${ext}`)
+      try { unlinkSync(filePath) } catch { /* file may already be gone */ }
+
+      await ctx.db
+        .delete(tournamentDocuments)
+        .where(eq(tournamentDocuments.id, input.documentId))
+
+      return { success: true }
     }),
 })
