@@ -45,7 +45,7 @@ interface StageForm {
   // Scoring
   scoringType: 'scratch' | 'handicap'
   handicapBase: number
-  handicapPercentage: number
+  handicapPercentage: number | ''
   noTap: boolean
   // Standings
   standingsScope: 'per_squad' | 'combined'
@@ -89,7 +89,7 @@ const defaultStage = (order: number, isLast: boolean): StageForm => ({
   seedBy: 'qualifying_order',
   scoringType: 'handicap',
   handicapBase: 220,
-  handicapPercentage: 80,
+  handicapPercentage: '',
   noTap: false,
   standingsScope: 'per_squad',
 })
@@ -130,7 +130,7 @@ function buildStageFormat(s: StageForm): StageFormatConfig {
   const scoring: ScoringConfig = {
     type: s.scoringType,
     handicapBase: s.handicapBase,
-    handicapPercentage: s.handicapPercentage,
+    handicapPercentage: s.handicapPercentage === '' ? 80 : s.handicapPercentage,
     handicapMax: null,
     noTap: s.noTap,
   }
@@ -753,7 +753,7 @@ export default function CreateTournamentPage() {
                         min={0}
                         max={100}
                         value={stage.handicapPercentage}
-                        onChange={(e) => updateStage(index, { handicapPercentage: parseInt(e.target.value, 10) || 80 })}
+                        onChange={(e) => updateStage(index, { handicapPercentage: e.target.value === '' ? '' : Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0)) })}
                         className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       />
                     </div>
