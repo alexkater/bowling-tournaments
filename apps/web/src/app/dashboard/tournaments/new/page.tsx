@@ -45,7 +45,7 @@ interface StageForm {
   // Scoring
   scoringType: 'scratch' | 'handicap'
   handicapBase: number
-  handicapPercentage: number
+  handicapPercentage: number | ''
   noTap: boolean
   // Standings
   standingsScope: 'per_squad' | 'combined'
@@ -89,7 +89,7 @@ const defaultStage = (order: number, isLast: boolean): StageForm => ({
   seedBy: 'qualifying_order',
   scoringType: 'handicap',
   handicapBase: 220,
-  handicapPercentage: 80,
+  handicapPercentage: '',
   noTap: false,
   standingsScope: 'per_squad',
 })
@@ -130,7 +130,7 @@ function buildStageFormat(s: StageForm): StageFormatConfig {
   const scoring: ScoringConfig = {
     type: s.scoringType,
     handicapBase: s.handicapBase,
-    handicapPercentage: s.handicapPercentage,
+    handicapPercentage: s.handicapPercentage === '' ? 80 : s.handicapPercentage,
     handicapMax: null,
     noTap: s.noTap,
   }
@@ -346,7 +346,7 @@ export default function CreateTournamentPage() {
       {step === 0 && (
         <div className="rounded-lg border border-gray-200 bg-white p-6 space-y-6">
           <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="name" className="block text-sm font-medium text-gray-800">
               Tournament Name *
             </label>
             <input
@@ -360,7 +360,7 @@ export default function CreateTournamentPage() {
           </div>
 
           <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="description" className="block text-sm font-medium text-gray-800">
               Description
             </label>
             <textarea
@@ -375,7 +375,7 @@ export default function CreateTournamentPage() {
 
           <div className="grid gap-6 sm:grid-cols-2">
             <div>
-              <label htmlFor="category" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="category" className="block text-sm font-medium text-gray-800">
                 Category
               </label>
               <select
@@ -391,7 +391,7 @@ export default function CreateTournamentPage() {
             </div>
 
             <div>
-              <label htmlFor="maxPlayers" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="maxPlayers" className="block text-sm font-medium text-gray-800">
                 Max Players
               </label>
               <input
@@ -414,14 +414,14 @@ export default function CreateTournamentPage() {
               onChange={(e) => updateForm('allowWaitlist', e.target.checked)}
               className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
             />
-            <label htmlFor="allowWaitlist" className="text-sm text-gray-700">
+            <label htmlFor="allowWaitlist" className="text-sm text-gray-800">
               Allow waitlist when full
             </label>
           </div>
 
           <div className="grid gap-6 sm:grid-cols-3">
             <div>
-              <label htmlFor="startDate" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="startDate" className="block text-sm font-medium text-gray-800">
                 Start Date *
               </label>
               <input
@@ -435,7 +435,7 @@ export default function CreateTournamentPage() {
             </div>
 
             <div>
-              <label htmlFor="endDate" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="endDate" className="block text-sm font-medium text-gray-800">
                 End Date *
               </label>
               <input
@@ -449,7 +449,7 @@ export default function CreateTournamentPage() {
             </div>
 
             <div>
-              <label htmlFor="registrationDeadline" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="registrationDeadline" className="block text-sm font-medium text-gray-800">
                 Registration Deadline
               </label>
               <input
@@ -491,7 +491,7 @@ export default function CreateTournamentPage() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Stage Name</label>
+                  <label className="block text-sm font-medium text-gray-800">Stage Name</label>
                   <input
                     type="text"
                     value={stage.name}
@@ -501,7 +501,7 @@ export default function CreateTournamentPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Format</label>
+                  <label className="block text-sm font-medium text-gray-800">Format</label>
                   <select
                     value={stage.formatType}
                     onChange={(e) => updateStage(index, { formatType: e.target.value as StageFormatType })}
@@ -519,7 +519,7 @@ export default function CreateTournamentPage() {
                 {stage.formatType === 'total_pins' && (
                   <>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Games Per Player</label>
+                      <label className="block text-sm font-medium text-gray-800">Games Per Player</label>
                       <input
                         type="number"
                         min={1}
@@ -530,7 +530,7 @@ export default function CreateTournamentPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Event Type</label>
+                      <label className="block text-sm font-medium text-gray-800">Event Type</label>
                       <select
                         value={stage.eventType}
                         onChange={(e) => updateStage(index, { eventType: e.target.value as EventType })}
@@ -549,7 +549,7 @@ export default function CreateTournamentPage() {
                 {stage.formatType === 'match_play' && (
                   <>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Rounds</label>
+                      <label className="block text-sm font-medium text-gray-800">Rounds</label>
                       <input
                         type="number"
                         min={1}
@@ -560,7 +560,7 @@ export default function CreateTournamentPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Points For Win</label>
+                      <label className="block text-sm font-medium text-gray-800">Points For Win</label>
                       <input
                         type="number"
                         min={0}
@@ -576,7 +576,7 @@ export default function CreateTournamentPage() {
                 {stage.formatType === 'bracket' && (
                   <>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Bracket Type</label>
+                      <label className="block text-sm font-medium text-gray-800">Bracket Type</label>
                       <select
                         value={stage.bracketType}
                         onChange={(e) => updateStage(index, { bracketType: e.target.value as 'single_elimination' | 'double_elimination' | 'eliminator_bracket' })}
@@ -588,7 +588,7 @@ export default function CreateTournamentPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Bracket Size</label>
+                      <label className="block text-sm font-medium text-gray-800">Bracket Size</label>
                       <select
                         value={stage.bracketSize}
                         onChange={(e) => updateStage(index, { bracketSize: parseInt(e.target.value, 10) })}
@@ -600,7 +600,7 @@ export default function CreateTournamentPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Seeding</label>
+                      <label className="block text-sm font-medium text-gray-800">Seeding</label>
                       <select
                         value={stage.seeding}
                         onChange={(e) => updateStage(index, { seeding: e.target.value as 'random' | 'by_qualifying' | 'by_average' })}
@@ -617,7 +617,7 @@ export default function CreateTournamentPage() {
                 {stage.formatType === 'stepladder' && (
                   <>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Positions</label>
+                      <label className="block text-sm font-medium text-gray-800">Positions</label>
                       <select
                         value={stage.positions}
                         onChange={(e) => updateStage(index, { positions: parseInt(e.target.value, 10) as 4 | 5 })}
@@ -628,7 +628,7 @@ export default function CreateTournamentPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Games Per Match</label>
+                      <label className="block text-sm font-medium text-gray-800">Games Per Match</label>
                       <input
                         type="number"
                         min={1}
@@ -644,7 +644,7 @@ export default function CreateTournamentPage() {
                 {stage.formatType === 'baker' && (
                   <>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Games Per Match</label>
+                      <label className="block text-sm font-medium text-gray-800">Games Per Match</label>
                       <input
                         type="number"
                         min={1}
@@ -655,7 +655,7 @@ export default function CreateTournamentPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Players Per Team</label>
+                      <label className="block text-sm font-medium text-gray-800">Players Per Team</label>
                       <input
                         type="number"
                         min={1}
@@ -670,7 +670,7 @@ export default function CreateTournamentPage() {
                 {stage.formatType === 'round_robin' && (
                   <>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Games Per Match</label>
+                      <label className="block text-sm font-medium text-gray-800">Games Per Match</label>
                       <input
                         type="number"
                         min={1}
@@ -680,7 +680,7 @@ export default function CreateTournamentPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Points For Win</label>
+                      <label className="block text-sm font-medium text-gray-800">Points For Win</label>
                       <input
                         type="number"
                         min={0}
@@ -696,7 +696,7 @@ export default function CreateTournamentPage() {
                 {stage.formatType === 'best_score' && (
                   <>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Games Per Attempt</label>
+                      <label className="block text-sm font-medium text-gray-800">Games Per Attempt</label>
                       <input
                         type="number"
                         min={1}
@@ -707,7 +707,7 @@ export default function CreateTournamentPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Max Attempts</label>
+                      <label className="block text-sm font-medium text-gray-800">Max Attempts</label>
                       <input
                         type="number"
                         min={1}
@@ -722,7 +722,7 @@ export default function CreateTournamentPage() {
 
                 {/* Scoring config (shown for all formats) */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Scoring</label>
+                  <label className="block text-sm font-medium text-gray-800">Scoring</label>
                   <select
                     value={stage.scoringType}
                     onChange={(e) => updateStage(index, { scoringType: e.target.value as 'scratch' | 'handicap' })}
@@ -736,7 +736,7 @@ export default function CreateTournamentPage() {
                 {stage.scoringType === 'handicap' && (
                   <>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Handicap Base</label>
+                      <label className="block text-sm font-medium text-gray-800">Handicap Base</label>
                       <input
                         type="number"
                         min={150}
@@ -747,13 +747,13 @@ export default function CreateTournamentPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Handicap %</label>
+                      <label className="block text-sm font-medium text-gray-800">Handicap %</label>
                       <input
                         type="number"
                         min={0}
                         max={100}
                         value={stage.handicapPercentage}
-                        onChange={(e) => updateStage(index, { handicapPercentage: parseInt(e.target.value, 10) || 80 })}
+                        onChange={(e) => updateStage(index, { handicapPercentage: e.target.value === '' ? '' : Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0)) })}
                         className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       />
                     </div>
@@ -768,14 +768,14 @@ export default function CreateTournamentPage() {
                     onChange={(e) => updateStage(index, { noTap: e.target.checked })}
                     className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
-                  <label htmlFor={`noTap-${index}`} className="text-sm text-gray-700">No-Tap</label>
+                  <label htmlFor={`noTap-${index}`} className="text-sm text-gray-800">No-Tap</label>
                 </div>
 
                 {/* Standings scope */}
                 <div className="mt-6 pt-4 border-t border-gray-100">
-                  <h4 className="text-sm font-semibold text-gray-700 mb-3">How are standings calculated?</h4>
+                  <h4 className="text-sm font-semibold text-gray-800 mb-3">How are standings calculated?</h4>
                   <div className="flex gap-6">
-                    <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <label className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
                       <input
                         type="radio"
                         name={`standingsScope-${index}`}
@@ -785,7 +785,7 @@ export default function CreateTournamentPage() {
                       />
                       Per Squad (separate rankings)
                     </label>
-                    <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <label className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
                       <input
                         type="radio"
                         name={`standingsScope-${index}`}
@@ -801,10 +801,10 @@ export default function CreateTournamentPage() {
 
               {/* Advancement config */}
               <div className="mt-6 pt-4 border-t border-gray-100">
-                <h4 className="text-sm font-semibold text-gray-700 mb-3">Advancement</h4>
+                <h4 className="text-sm font-semibold text-gray-800 mb-3">Advancement</h4>
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Type</label>
+                    <label className="block text-sm font-medium text-gray-800">Type</label>
                     <select
                       value={stage.advancementType}
                       onChange={(e) => updateStage(index, { advancementType: e.target.value as AdvancementType })}
@@ -821,7 +821,7 @@ export default function CreateTournamentPage() {
                   {stage.advancementType === 'cut_line' && (
                     <>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">Advance Count</label>
+                        <label className="block text-sm font-medium text-gray-800">Advance Count</label>
                         <input
                           type="number"
                           min={1}
@@ -831,7 +831,7 @@ export default function CreateTournamentPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">Tiebreaker</label>
+                        <label className="block text-sm font-medium text-gray-800">Tiebreaker</label>
                         <select
                           value={stage.tiebreaker}
                           onChange={(e) => updateStage(index, { tiebreaker: e.target.value as 'highest_game' | 'highest_series' | 'roll_off' | 'shared' })}
@@ -855,14 +855,14 @@ export default function CreateTournamentPage() {
                         onChange={(e) => updateStage(index, { carryScores: e.target.checked })}
                         className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                       />
-                      <label htmlFor={`carryScores-${index}`} className="text-sm text-gray-700">Carry Scores</label>
+                      <label htmlFor={`carryScores-${index}`} className="text-sm text-gray-800">Carry Scores</label>
                     </div>
                   )}
 
                   {stage.advancementType === 'bracket_seeding' && (
                     <>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">Seed Count</label>
+                        <label className="block text-sm font-medium text-gray-800">Seed Count</label>
                         <input
                           type="number"
                           min={2}
@@ -872,7 +872,7 @@ export default function CreateTournamentPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">Seed By</label>
+                        <label className="block text-sm font-medium text-gray-800">Seed By</label>
                         <select
                           value={stage.seedBy}
                           onChange={(e) => updateStage(index, { seedBy: e.target.value as 'qualifying_order' | 'average' })}
@@ -909,7 +909,7 @@ export default function CreateTournamentPage() {
           </div>
 
           <div className="rounded-lg bg-gray-50 p-4">
-            <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Basic Information</h4>
+            <h4 className="text-sm font-semibold text-gray-800 uppercase tracking-wider">Basic Information</h4>
             <dl className="mt-3 grid gap-3 sm:grid-cols-2">
               <div>
                 <dt className="text-xs text-gray-500">Name</dt>
@@ -951,7 +951,7 @@ export default function CreateTournamentPage() {
           </div>
 
           <div className="space-y-4">
-            <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Stages ({form.stages.length})</h4>
+            <h4 className="text-sm font-semibold text-gray-800 uppercase tracking-wider">Stages ({form.stages.length})</h4>
             {form.stages.map((stage, index) => (
               <div key={index} className="rounded-lg border border-gray-200 p-4">
                 <div className="flex items-center justify-between">
@@ -991,7 +991,7 @@ export default function CreateTournamentPage() {
             <button
               type="button"
               onClick={handleBack}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 transition-colors"
             >
               <ChevronLeft className="h-4 w-4" />
               Back
