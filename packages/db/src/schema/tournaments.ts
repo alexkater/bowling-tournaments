@@ -6,6 +6,7 @@ import { tournamentPlayers } from './tournament_players'
 import { bracketPools } from './brackets'
 import { sidepots } from './sidepots'
 import { paymentTransactions } from './payments'
+import { tournamentDocuments } from './tournament_documents'
 
 export const tournaments = pgTable('tournaments', {
   id: text().primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -31,4 +32,5 @@ export const tournamentsRelations = relations(tournaments, ({ one, many }) => ({
   bracketPools: many(bracketPools),
   sidepots: many(sidepots),
   paymentTransactions: many(paymentTransactions),
+  documents: many(tournamentDocuments),
 }))

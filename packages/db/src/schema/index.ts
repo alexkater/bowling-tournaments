@@ -27,3 +27,4 @@ export { paymentTransactions, paymentTransactionsRelations } from './payments';
 export { userCredentials, userCredentialsRelations } from './user_credentials';
 export { authTokens, authRateLimits } from './auth_security';
 export { notifications, emailLogs } from './communications';
+export { tournamentDocuments, tournamentDocumentsRelations } from './tournament_documents';

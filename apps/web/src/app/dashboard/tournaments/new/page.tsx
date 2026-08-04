@@ -61,6 +61,15 @@ interface TournamentFormData {
   endDate: string
   registrationDeadline: string
   stages: StageForm[]
+  documents: DocumentForm[]
+}
+
+interface DocumentForm {
+  title: string
+  description: string
+  file: File | null
+  uploaded: boolean
+  uploading: boolean
 }
 
 const defaultStage = (order: number, isLast: boolean): StageForm => ({
@@ -194,6 +203,7 @@ export default function CreateTournamentPage() {
     endDate: '',
     registrationDeadline: '',
     stages: [defaultStage(0, true)],
+    documents: [],
   })
 
   const updateForm = useCallback(<K extends keyof TournamentFormData>(
@@ -239,6 +249,34 @@ export default function CreateTournamentPage() {
     })
   }, [])
 
+  const addDocument = useCallback(() => {
+    setForm((prev) => ({
+      ...prev,
+      documents: [...prev.documents, { title: '', description: '', file: null, uploaded: false, uploading: false }],
+    }))
+  }, [])
+
+  const removeDocument = useCallback((index: number) => {
+    setForm((prev) => ({
+      ...prev,
+      documents: prev.documents.filter((_, i) => i !== index),
+    }))
+  }, [])
+
+  const updateDocument = useCallback((index: number, updates: Partial<DocumentForm>) => {
+    setForm((prev) => ({
+      ...prev,
+      documents: prev.documents.map((d, i) => (i === index ? { ...d, ...updates } : d)),
+    }))
+  }, [])
+
+  const addDocumentMutation = trpc.tournament.addDocument.useMutation()
+
+  const handleDocumentFile = useCallback((index: number, file: File | null) => {
+    if (!file) return
+    updateDocument(index, { file, uploaded: false, uploading: false })
+  }, [updateDocument])
+
   const validateStep = (): string | null => {
     if (step === 0) {
       if (!form.name.trim()) return 'Tournament name is required'
@@ -273,7 +311,7 @@ export default function CreateTournamentPage() {
     setStep((s) => Math.max(s - 1, 0))
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setError(null)
 
     const stages = form.stages.map((s, i) => ({
@@ -285,10 +323,13 @@ export default function CreateTournamentPage() {
       standingsScope: s.standingsScope,
     }))
 
+    // Upload documents that have files attached
+    const docsToUpload = form.documents.filter((d) => d.file && !d.uploaded && d.title.trim())
+
     createMutation.mutate({
       name: form.name.trim(),
       description: form.description.trim() || null,
-      centerId: '00000000-0000-0000-0000-000000000000', // placeholder — Wave 7 will add center selection
+      centerId: '00000000-0000-0000-0000-000000000000',
       category: form.category,
       maxPlayers: form.maxPlayers ? parseInt(form.maxPlayers, 10) : null,
       allowWaitlist: form.allowWaitlist,
@@ -298,6 +339,39 @@ export default function CreateTournamentPage() {
         ? new Date(form.registrationDeadline).toISOString()
         : null,
       stages,
+    }, {
+      onSuccess: async (data) => {
+        // Upload each document
+        for (const doc of docsToUpload) {
+          if (!doc.file || !doc.title.trim()) continue
+          const idx = form.documents.indexOf(doc)
+          if (idx >= 0) updateDocument(idx, { uploading: true })
+          try {
+            const base64 = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader()
+              reader.onload = () => resolve((reader.result as string).split(',')[1] ?? '')
+              reader.onerror = reject
+              reader.readAsDataURL(doc.file!)
+            })
+            await addDocumentMutation.mutateAsync({
+              tournamentId: data.id,
+              title: doc.title.trim(),
+              description: doc.description.trim() || undefined,
+              fileName: doc.file.name,
+              fileSize: doc.file.size,
+              mimeType: doc.file.type || 'application/octet-stream',
+              contentBase64: base64,
+            })
+            if (idx >= 0) updateDocument(idx, { uploaded: true, uploading: false })
+          } catch {
+            if (idx >= 0) updateDocument(idx, { uploading: false })
+            setError('Failed to upload some documents. You can add them later from the tournament page.')
+          }
+        }
+      },
+      onError: (err) => {
+        setError(err.message)
+      },
     })
   }
 
@@ -460,6 +534,84 @@ export default function CreateTournamentPage() {
                 className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
+          </div>
+
+          {/* Document uploads */}
+          <div className="border-t border-gray-100 pt-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-800">Tournament Documents</h3>
+              <span className="text-xs text-gray-500">Optional — PDFs, rules, schedules, etc.</span>
+            </div>
+
+            {form.documents.map((doc, i) => (
+              <div key={i} className="mb-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 space-y-3">
+                    <input
+                      type="text"
+                      placeholder="Document title (required)"
+                      value={doc.title}
+                      onChange={(e) => updateDocument(i, { title: e.target.value })}
+                      className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Description (optional)"
+                      value={doc.description}
+                      onChange={(e) => updateDocument(i, { description: e.target.value })}
+                      className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    {!doc.file && (
+                      <input
+                        type="file"
+                        onChange={(e) => handleDocumentFile(i, e.target.files?.[0] ?? null)}
+                        className="block w-full text-sm text-gray-600 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
+                      />
+                    )}
+                    {doc.file && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <span className="truncate">📄 {doc.file.name}</span>
+                        <span className="text-gray-400">({(doc.file.size / 1024).toFixed(0)} KB)</span>
+                        <button
+                          type="button"
+                          onClick={() => updateDocument(i, { file: null })}
+                          className="text-red-500 hover:text-red-700 text-xs"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )}
+                    {doc.uploading && (
+                      <span className="text-xs text-blue-600 animate-pulse">Uploading...</span>
+                    )}
+                    {doc.uploaded && (
+                      <span className="text-xs text-green-600">✓ Uploaded</span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeDocument(i)}
+                    className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                    title="Remove document"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            <button
+              type="button"
+              onClick={addDocument}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Add document
+            </button>
           </div>
         </div>
       )}
